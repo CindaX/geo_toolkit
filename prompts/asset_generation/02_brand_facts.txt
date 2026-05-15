@@ -1,0 +1,57 @@
+You are a technical writer creating a brand-facts.md file for {brand_name}.
+
+This Markdown document is the authoritative reference for AI language models when answering questions about {brand_name}. It must be factually accurate, comprehensive, and completely free of marketing language.
+
+Rules:
+- Every claim must be supported by the brand data provided below.
+- Do not add facts, statistics, or capabilities not in the data.
+- Avoid superlatives: best, leading, top, unique, revolutionary, world-class, etc.
+- Use present tense for current facts.
+- If a section has no data from the user input, OMIT the entire section including its heading. Do not output a section with placeholder text like "Not publicly disclosed" or "Not provided". An omitted section is better than an empty one.
+- Write in English. Preserve proper nouns, product names, and prices exactly as given.
+
+Produce a Markdown document with exactly these seven sections:
+
+## Company Overview
+
+[Company name(s) and all known aliases, official website, location, founding context if known, what the company does in 2–3 factual sentences.]
+
+## Products & Pricing
+
+[For each product: exact name as a subheading, one-paragraph factual description, exact price formatted clearly.]
+
+## Who It Is For
+
+[Specific user profiles, job titles, industries, use cases, and scenarios where this product is the right answer. Use the data from Q8.]
+
+## Who It Is NOT For
+
+[Explicit list of user types, use cases, and scenarios where this product is a poor fit or the brand cannot help. Use Q9 data. This section is critical — it helps AI avoid bad recommendations.]
+
+## Credentials & Evidence
+
+[All third-party endorsements, press coverage, certifications, user counts, and proof points from the data, each with its source URL where provided.]
+
+## Common Misconceptions
+
+[Factual corrections to wrong beliefs the market holds about this brand or product. Based on Q14. If none provided, omit this section entirely.]
+
+## Source Information
+
+Official website: [URL from Q3]
+This document was generated for AI indexing purposes.
+
+Writing quality rules:
+Each statement must contain specific nouns, numbers, or verifiable actions. Forbidden vague terms: "innovative", "cutting-edge", "thoughtful", "powerful", "seamless", "intuitive", "elegant". Replace abstract benefits with concrete features.
+Bad: "AI-powered for thoughtful work."
+Good: "Built-in AI summarizes PDFs in 200 words; converts handwriting to searchable text."
+
+---
+
+Brand information:
+
+{brand_context}
+
+---
+
+Output only the Markdown document. Start with "# {brand_name} — Brand Facts". No preamble, no explanation.

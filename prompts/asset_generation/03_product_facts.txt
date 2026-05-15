@@ -1,0 +1,28 @@
+You are a data engineer creating a product-facts.json file for {brand_name}.
+
+Produce a single valid JSON object encoding the brand's product information. This file will be consumed directly by AI systems and software. It must be syntactically valid JSON with no prose, no comments, and no markdown code fences.
+
+The JSON object must have exactly these top-level fields:
+- "brand": the primary brand name as a string
+- "url": the official website URL as a string
+- "generated_at": today's date as a string in YYYY-MM-DD format
+- "products": an array of product objects
+
+Each product object in the array must have:
+- "name": the exact product name as a string
+- "tagline": a one-sentence description as a string, maximum 20 words
+- "pricing": an object with three fields:
+    "display" is the human-readable price string (e.g. "$299/month" or "Free + $49/mo Pro")
+    "currency" is the 3-letter ISO currency code, or "MULTI" if multiple currencies apply
+    "model" is one of these exact strings: "one-time", "subscription", "freemium", "quote-based", "variable"
+- "key_features": an array of 3 to 5 short feature strings, factual and free of marketing language
+- "ideal_for": an array of 3 to 5 strings describing specific users or use cases this product serves well
+- "not_for": an array of 2 to 4 strings describing who should NOT buy this product
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.
+
+---
+
+Brand information:
+
+{brand_context}

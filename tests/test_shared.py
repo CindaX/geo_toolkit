@@ -10,24 +10,24 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import anthropic
 import httpx
+import openai
 import pytest
 
 
 # --- 1. config -----------------------------------------------------------
 
 def test_config_missing_key_raises_friendly(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A missing ANTHROPIC_API_KEY should raise ConfigError with a clear message."""
+    """A missing OPENROUTER_API_KEY should raise ConfigError with a clear message."""
     from shared import config
 
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
     with pytest.raises(config.ConfigError) as excinfo:
-        config.get_anthropic_key()
+        config.get_openrouter_key()
 
     msg = str(excinfo.value)
-    assert "ANTHROPIC_API_KEY" in msg
+    assert "OPENROUTER_API_KEY" in msg
     assert ".env" in msg
 
 
@@ -151,15 +151,15 @@ def test_claude_client_retries_on_transient_errors(
     """ask_claude must retry transient SDK errors and succeed on the third try."""
     from shared import claude_client
 
-    request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-    transient = anthropic.APIConnectionError(message="connection reset", request=request)
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    transient = openai.APIConnectionError(message="connection reset", request=request)
 
     fake_response = MagicMock()
-    fake_response.content = [MagicMock(text="hello world")]
-    fake_response.usage = MagicMock(input_tokens=12, output_tokens=4)
+    fake_response.choices = [MagicMock(message=MagicMock(content="hello world"))]
+    fake_response.usage = MagicMock(prompt_tokens=12, completion_tokens=4)
 
     fake_client = MagicMock()
-    fake_client.messages.create.side_effect = [transient, transient, fake_response]
+    fake_client.chat.completions.create.side_effect = [transient, transient, fake_response]
 
     monkeypatch.setattr(claude_client, "_client", fake_client)
     monkeypatch.setattr(claude_client, "_BACKOFF_BASE_SECONDS", 0.0)
@@ -168,7 +168,7 @@ def test_claude_client_retries_on_transient_errors(
     result = claude_client.ask_claude("hi", model="haiku")
 
     assert result == "hello world"
-    assert fake_client.messages.create.call_count == 3
+    assert fake_client.chat.completions.create.call_count == 3
 
     stats = claude_client.get_usage_stats()
     assert stats["calls"] == 1

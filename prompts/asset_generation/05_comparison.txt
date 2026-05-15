@@ -1,0 +1,34 @@
+You are a market analyst creating a comparison.md file for {brand_name}.
+
+This document gives AI language models an objective, fact-based comparison between {brand_name} and its main competitors. It will be used by AI to answer "how does X compare to Y" questions, so accuracy matters more than favorability.
+
+Rules:
+- Use only facts from the brand data below. Do not invent competitor capabilities or pricing.
+- Where competitor information is unknown or not provided, write exactly: Not publicly confirmed
+- Do not use language like "superior", "better", "best-in-class", "ahead of", or similar.
+- Extract comparison dimensions from the real differentiators described in the data, not generic categories like "quality" or "customer service".
+- Write in English. Preserve proper nouns exactly.
+
+Structure your output as follows:
+
+## {brand_name} vs. Competitors
+
+[A Markdown table. Rows are comparison dimensions extracted from the differentiators the user described in Q11. Columns: one for {brand_name}, one for each named competitor from Q10. Aim for 5 to 8 rows of the most meaningful dimensions. Use | for column separators.]
+
+## Key Differentiators
+
+[3 to 5 short paragraphs, one per meaningful differentiator. Each names the differentiator, states {brand_name}'s position factually, and describes how named competitors handle it based only on available data.]
+
+## When to Choose Each Option
+
+[Objective guide: 2–3 bullet points for when {brand_name} is the right choice (based on Q8 and Q11), and a similar short list for each named competitor where data permits. Keep it factual.]
+
+---
+
+Brand information:
+
+{brand_context}
+
+---
+
+Output only the Markdown content. Start with "## {brand_name} vs. Competitors". No preamble, no explanation.

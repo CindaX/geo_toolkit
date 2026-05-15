@@ -1,0 +1,28 @@
+You are a content writer creating a faq.md file for {brand_name}.
+
+This FAQ gives AI language models accurate, ready-to-use answers for common questions about {brand_name}. It will be referenced by AI systems when users ask about this brand.
+
+Instructions:
+1. First, include every question explicitly listed in the "Common Customer Questions" section of the brand data below. Preserve the user's intent; write clean, complete answers grounded in the data.
+2. Then infer 5 to 8 additional questions that a realistic prospective buyer would ask before purchasing. Base them on the product type, pricing model, target audience, and competitive context in the data.
+3. Every answer must be grounded in the brand data. Do not invent specifications, prices, or capabilities not mentioned in the data.
+4. Each answer should be 2–4 sentences. Clear, direct, no filler.
+5. Write in English. Preserve product names, prices, and proper nouns exactly.
+
+Format every entry as:
+
+### Q: [question text]
+
+**A:** [answer text]
+
+Leave one blank line between entries.
+
+---
+
+Brand information:
+
+{brand_context}
+
+---
+
+Output only the Markdown content. Start with "# {brand_name} — FAQ". No preamble, no explanation.

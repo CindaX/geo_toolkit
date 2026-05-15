@@ -1,8 +1,9 @@
 """Configuration and secrets loading.
 
-All API keys live in the project's ``.env`` file (see ``.env.example``).
-Functions in this module read them lazily and raise a ``ConfigError`` with
-a clear, actionable message if a key is missing — never a raw ``KeyError``.
+All LLM access is routed through OpenRouter, so a single
+``OPENROUTER_API_KEY`` in ``.env`` covers Claude, GPT-4o, and Perplexity.
+:func:`get_openrouter_key` reads it lazily and raises a friendly
+:class:`ConfigError` if the key is missing — never a raw ``KeyError``.
 """
 
 from __future__ import annotations
@@ -20,13 +21,40 @@ _ENV_PATH: Path = PROJECT_ROOT / ".env"
 load_dotenv(_ENV_PATH, override=False)
 
 
+# --- OpenRouter endpoint -------------------------------------------------
+
+OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+
+_OPENROUTER_REFERER_DEFAULT: str = "https://github.com/CindaX/geo_toolkit"
+_OPENROUTER_APP_NAME_DEFAULT: str = "geo_toolkit"
+
+
 # --- Model identifiers ---------------------------------------------------
 
-DEFAULT_MODEL: str = "claude-opus-4-7"
-"""Default Anthropic model — high-quality reasoning."""
+# Anthropic family (via OpenRouter) — use dot-notation version strings.
+CLAUDE_HAIKU: str = "anthropic/claude-haiku-4.5"
+CLAUDE_SONNET: str = "anthropic/claude-sonnet-4.5"
+CLAUDE_PREMIUM: str = "anthropic/claude-opus-4.6"   # Opus 4.6, not 4.5
 
-CHEAP_MODEL: str = "claude-haiku-4-5-20251001"
-"""Lower-cost Anthropic model for bulk / draft work."""
+# Backward-compat alias so any existing import of ``CLAUDE_OPUS`` keeps working.
+CLAUDE_OPUS: str = CLAUDE_PREMIUM
+
+# OpenAI family (via OpenRouter)
+OPENAI_GPT4O_MINI: str = "openai/gpt-4o-mini"
+
+# Perplexity online (via OpenRouter) — built-in real-time web search.
+PERPLEXITY_SONAR_ONLINE: str = "perplexity/llama-3.1-sonar-small-128k-online"
+
+# --- Semantic tier aliases -----------------------------------------------
+
+DEFAULT_MODEL: str = CLAUDE_SONNET
+"""Default model for most tasks — Sonnet 4.5 (good quality / cost balance)."""
+
+CHEAP_MODEL: str = CLAUDE_HAIKU
+"""Fast, low-cost model for bulk / draft work — Haiku 4.5."""
+
+PREMIUM_MODEL: str = CLAUDE_PREMIUM
+"""Highest-capability model — Opus 4.6 (use when quality matters most)."""
 
 
 # --- Errors --------------------------------------------------------------
@@ -39,14 +67,6 @@ class ConfigError(RuntimeError):
 
 def _require_env(var_name: str, *, hint: str) -> str:
     """Return the env var value, or raise a friendly :class:`ConfigError`.
-
-    Args:
-        var_name: Name of the environment variable to look up.
-        hint: Short human-readable description of what the variable is for,
-            used to build the error message.
-
-    Returns:
-        The non-empty value of the environment variable.
 
     Raises:
         ConfigError: If the variable is unset or empty.
@@ -62,16 +82,28 @@ def _require_env(var_name: str, *, hint: str) -> str:
 
 # --- Public accessors ----------------------------------------------------
 
-def get_anthropic_key() -> str:
-    """Return the Anthropic API key, or raise :class:`ConfigError`."""
-    return _require_env("ANTHROPIC_API_KEY", hint="Anthropic / Claude API key")
+def get_openrouter_key() -> str:
+    """Return the OpenRouter API key, or raise :class:`ConfigError`."""
+    return _require_env(
+        "OPENROUTER_API_KEY",
+        hint="OpenRouter API key — covers Claude, GPT-4o, and Perplexity",
+    )
 
 
-def get_openai_key() -> str:
-    """Return the OpenAI API key, or raise :class:`ConfigError`."""
-    return _require_env("OPENAI_API_KEY", hint="OpenAI API key")
+def get_openrouter_referer() -> str:
+    """Return the HTTP-Referer header value for OpenRouter attribution.
+
+    Reads ``OPENROUTER_REFERER`` from the environment; falls back to the
+    default GitHub URL if unset. This field is optional — OpenRouter uses
+    it for its public model-usage leaderboard only.
+    """
+    return os.environ.get("OPENROUTER_REFERER", "").strip() or _OPENROUTER_REFERER_DEFAULT
 
 
-def get_perplexity_key() -> str:
-    """Return the Perplexity API key, or raise :class:`ConfigError`."""
-    return _require_env("PERPLEXITY_API_KEY", hint="Perplexity API key")
+def get_openrouter_app_name() -> str:
+    """Return the X-Title header value for OpenRouter attribution.
+
+    Reads ``OPENROUTER_APP_NAME`` from the environment; falls back to
+    ``"geo_toolkit"`` if unset.
+    """
+    return os.environ.get("OPENROUTER_APP_NAME", "").strip() or _OPENROUTER_APP_NAME_DEFAULT

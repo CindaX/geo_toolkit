@@ -1,8 +1,10 @@
-"""Thin wrapper around the Anthropic Python SDK.
+"""Thin wrapper around Claude via OpenRouter.
 
-Exposes two synchronous helpers — :func:`ask_claude` (free-form text) and
-:func:`ask_claude_json` (forces a JSON response) — both with retry on
-transient failures and module-level token-usage accounting.
+Calls go through OpenRouter's OpenAI-compatible chat completions endpoint
+using the ``openai`` SDK. Exposes two synchronous helpers —
+:func:`ask_claude` (free-form text) and :func:`ask_claude_json` (forces a
+JSON response) — both with retry on transient failures and module-level
+token-usage accounting.
 """
 
 from __future__ import annotations
@@ -13,9 +15,18 @@ import re
 import time
 from typing import Any
 
-import anthropic
+import openai
+from openai import OpenAI
 
-from shared.config import CHEAP_MODEL, DEFAULT_MODEL, get_anthropic_key
+from shared._openrouter import get_openrouter_client
+from shared.config import (
+    CHEAP_MODEL,
+    CLAUDE_HAIKU,
+    CLAUDE_PREMIUM,
+    CLAUDE_SONNET,
+    DEFAULT_MODEL,
+    PREMIUM_MODEL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +39,20 @@ class ClaudeError(RuntimeError):
 
 # --- Module state --------------------------------------------------------
 
-_client: anthropic.Anthropic | None = None
+# Module-level slot used by tests to inject a mock client. When ``None``
+# (production), :func:`_client_or_default` falls through to the shared
+# OpenRouter factory.
+_client: OpenAI | None = None
+
 _usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0, "calls": 0}
 
 _MODEL_ALIASES: dict[str, str] = {
-    "opus": DEFAULT_MODEL,
-    "haiku": CHEAP_MODEL,
-    "default": DEFAULT_MODEL,
-    "cheap": CHEAP_MODEL,
+    "opus":    CLAUDE_PREMIUM,  # Opus 4.6 — most capable
+    "premium": CLAUDE_PREMIUM,  # explicit premium alias
+    "sonnet":  CLAUDE_SONNET,   # Sonnet 4.5
+    "haiku":   CLAUDE_HAIKU,    # Haiku 4.5 — fastest / cheapest
+    "default": DEFAULT_MODEL,   # → Sonnet 4.5
+    "cheap":   CHEAP_MODEL,     # → Haiku 4.5
 }
 
 _MAX_RETRIES: int = 3
@@ -44,50 +61,56 @@ _BACKOFF_BASE_SECONDS: float = 1.0
 
 # --- Internal ------------------------------------------------------------
 
-def _get_client() -> anthropic.Anthropic:
-    """Return a process-wide Anthropic client, creating it lazily."""
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=get_anthropic_key())
-    return _client
+def _client_or_default() -> OpenAI:
+    """Return the test-injected client if set, else the shared OpenRouter client."""
+    return _client if _client is not None else get_openrouter_client()
 
 
-def _resolve_model(model: str) -> str:
+def _resolve_model(model: str | None) -> str:
+    """Map a friendly alias or ``None`` to a real OpenRouter model id."""
+    if model is None:
+        model = "default"
     return _MODEL_ALIASES.get(model, model)
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    if isinstance(exc, (anthropic.APIConnectionError, anthropic.RateLimitError)):
+    if isinstance(exc, (openai.APIConnectionError, openai.RateLimitError)):
         return True
-    if isinstance(exc, anthropic.APIStatusError):
+    if isinstance(exc, openai.APIStatusError):
         # Retry on 5xx; 4xx are caller errors and shouldn't be retried.
         return 500 <= exc.status_code < 600
     return False
+
+
+def _build_messages(prompt: str, system: str | None) -> list[dict[str, str]]:
+    """Translate a (system, prompt) pair into chat-completions message form."""
+    messages: list[dict[str, str]] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    return messages
 
 
 def _call_with_retry(
     *,
     prompt: str,
     system: str | None,
-    model: str,
+    model: str | None,
     max_tokens: int,
 ) -> tuple[str, dict[str, int]]:
-    """Call ``messages.create`` with retry. Returns (text, usage_delta)."""
-    client = _get_client()
+    """Call ``chat.completions.create`` with retry. Returns (text, usage_delta)."""
+    client = _client_or_default()
     resolved = _resolve_model(model)
     last_exc: BaseException | None = None
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            kwargs: dict[str, Any] = {
-                "model": resolved,
-                "max_tokens": max_tokens,
-                "messages": [{"role": "user", "content": prompt}],
-            }
-            if system:
-                kwargs["system"] = system
-            resp = client.messages.create(**kwargs)
-        except Exception as exc:  # noqa: BLE001 — we re-raise after classification
+            resp = client.chat.completions.create(
+                model=resolved,
+                max_tokens=max_tokens,
+                messages=_build_messages(prompt, system),
+            )
+        except Exception as exc:  # noqa: BLE001 — re-raised after classification
             last_exc = exc
             if not _is_retryable(exc) or attempt == _MAX_RETRIES:
                 raise ClaudeError(
@@ -105,25 +128,27 @@ def _call_with_retry(
         usage = _extract_usage(resp)
         return text, usage
 
-    # Should be unreachable, but satisfies the type checker.
     raise ClaudeError(f"Claude call failed: {last_exc}")
 
 
 def _extract_text(resp: Any) -> str:
-    """Concatenate text blocks from a ``messages.create`` response."""
-    parts: list[str] = []
-    for block in getattr(resp, "content", []) or []:
-        text = getattr(block, "text", None)
-        if isinstance(text, str):
-            parts.append(text)
-    return "".join(parts).strip()
+    """Pull the assistant text from a chat.completions response."""
+    choices = getattr(resp, "choices", None) or []
+    if not choices:
+        return ""
+    message = getattr(choices[0], "message", None)
+    if message is None:
+        return ""
+    content = getattr(message, "content", "") or ""
+    return content.strip()
 
 
 def _extract_usage(resp: Any) -> dict[str, int]:
+    """Map OpenAI's ``prompt/completion_tokens`` to our internal ``input/output_tokens``."""
     usage = getattr(resp, "usage", None)
     return {
-        "input_tokens": int(getattr(usage, "input_tokens", 0) or 0),
-        "output_tokens": int(getattr(usage, "output_tokens", 0) or 0),
+        "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+        "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
     }
 
 
@@ -136,8 +161,8 @@ def _record_usage(delta: dict[str, int]) -> None:
 def _parse_json_loose(text: str) -> dict[str, Any]:
     """Try to pull a JSON object out of ``text``.
 
-    Falls back to extracting from a fenced ``\\u0060\\u0060\\u0060json`` block if a bare parse
-    fails. Raises ``ValueError`` if no parse is possible.
+    Falls back to a fenced code block if a bare parse fails.
+    Raises ``ValueError`` if no parse is possible.
     """
     text = text.strip()
     try:
@@ -145,13 +170,11 @@ def _parse_json_loose(text: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         match = re.search(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", text, re.S)
         if not match:
-            # Last-ditch: find the first {...} span.
             match = re.search(r"(\{.*\}|\[.*\])", text, re.S)
         if not match:
             raise ValueError("Response did not contain JSON")
         parsed = json.loads(match.group(1))
     if not isinstance(parsed, dict):
-        # Wrap arrays/scalars so callers always get a dict.
         return {"data": parsed}
     return parsed
 
@@ -162,21 +185,23 @@ def ask_claude(
     prompt: str,
     *,
     system: str | None = None,
-    model: str = "opus",
+    model: str | None = None,
     max_tokens: int = 4096,
 ) -> str:
-    """Send a prompt to Claude and return the text response.
+    """Send a prompt to Claude (via OpenRouter) and return the text response.
 
     Args:
         prompt: The user message.
         system: Optional system prompt.
-        model: Model id or alias (``"opus"``, ``"haiku"``, ``"default"``,
-            ``"cheap"``, or a literal model id).
+        model: Model id or alias. ``None`` (default) uses :data:`DEFAULT_MODEL`
+            (Sonnet 4.5). Named aliases: ``"default"``, ``"sonnet"``,
+            ``"haiku"``, ``"cheap"``, ``"opus"``, ``"premium"``. A full
+            OpenRouter model id (e.g. ``"anthropic/claude-sonnet-4.5"``) is
+            passed through unchanged.
         max_tokens: Max tokens to generate.
 
     Returns:
-        The model's text response (already stripped of leading/trailing
-        whitespace).
+        The assistant's text response, stripped of leading/trailing whitespace.
 
     Raises:
         ClaudeError: If the call fails after all retries.
@@ -192,18 +217,17 @@ def ask_claude_json(
     prompt: str,
     *,
     system: str | None = None,
-    model: str = "opus",
+    model: str | None = None,
     max_tokens: int = 4096,
 ) -> dict[str, Any]:
     """Like :func:`ask_claude` but force a JSON object response.
 
     A short instruction is prepended to the system prompt to coax JSON-only
-    output. If the first response doesn't parse, a single re-ask is made.
+    output. If the first response doesn't parse, one re-ask is made.
 
     Returns:
         The parsed JSON object. On unrecoverable parse failure, returns
-        ``{"error": "...", "raw": "<raw text>"}`` instead of raising — so
-        callers can surface a friendly message in the UI.
+        ``{"error": "...", "raw": "<raw text>"}`` instead of raising.
     """
     json_directive = (
         "Respond with ONLY a valid JSON object. No prose, no markdown fences, "

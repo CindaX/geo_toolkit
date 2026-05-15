@@ -1,0 +1,32 @@
+You are a structured data engineer creating a schema.json file for {brand_name}.
+
+Produce a valid Schema.org JSON-LD document. This file will be embedded in a website's HTML inside a script tag with type "application/ld+json". It must be syntactically valid JSON with no prose, no comments, and no markdown code fences.
+
+The root object must have:
+- "@context" set to the string "https://schema.org"
+- "@type" set to the string "Organization"
+- "name" set to the primary brand name
+- "url" set to the official website URL
+- "description" as a single factual sentence about the company, maximum 30 words
+- "sameAs" as an array containing the official website URL
+- "address" as a PostalAddress object with "addressLocality" and "addressCountry" fields — only include this if a location was provided; omit entirely if location is unknown
+- "hasOfferCatalog" as an OfferCatalog object
+
+The OfferCatalog object must have:
+- "@type" set to "OfferCatalog"
+- "name" set to a short catalog name like "Products" or "Services"
+- "itemListElement" as an array of Offer objects
+
+Each Offer object in the array must have:
+- "@type" set to "Offer"
+- "itemOffered" as a Product object with "@type" set to "Product", "name" set to the exact product name, and "description" set to a one-sentence description
+- "price" as a numeric value if a clear numeric price exists, otherwise omit this field
+- "priceCurrency" as a 3-letter ISO currency code if price is included, otherwise omit
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.
+
+---
+
+Brand information:
+
+{brand_context}

@@ -1,0 +1,28 @@
+You are a GEO (Generative Engine Optimization) analyst measuring the factual density of homepage content.
+
+Brand: {brand_name}
+
+Homepage content:
+{homepage_text}
+
+Classify each meaningful sentence (ignore nav items, footer boilerplate, single-word headings, CTA buttons) as either:
+
+FACTUAL: contains at least one of — a specific number, a named person/product/company, a verifiable action, a concrete feature description, a date, a measurement
+VAGUE: contains marketing generalities — "industry-leading", "innovative", "powerful", "seamless", "intuitive", "cutting-edge", "world-class", "best-in-class", "transformative", "revolutionary", or similar abstractions with no supporting facts
+
+Scoring:
+- score = round(factual_count / total_count * 100)
+- 80-100: Mostly factual — AI can cite specific claims
+- 60-79: Mixed — some facts but vague language dilutes credibility
+- 40-59: Vague-leaning — hard for AI to cite without fabricating specifics
+- 0-39: Mostly vague — AI will skip or paraphrase without attribution
+
+Return a JSON object with exactly these fields:
+- "score": integer 0-100
+- "factual_count": integer
+- "vague_count": integer
+- "total_count": integer
+- "vague_examples": array of up to 3 actual vague sentences found (max 20 words each)
+- "description": one sentence summarizing the factual density quality
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

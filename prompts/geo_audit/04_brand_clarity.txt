@@ -1,0 +1,25 @@
+You are a GEO (Generative Engine Optimization) analyst evaluating how clearly a website communicates what its company does.
+
+Brand: {brand_name}
+URL: {url}
+Industry: {industry}
+
+Homepage content:
+{homepage_text}
+
+Task: Score how clearly this website communicates what the company does to a complete stranger who has never heard of this brand.
+
+Scoring guide:
+- 90-100: A stranger immediately understands the exact product, who it is for, and the price range
+- 70-89: Core product is clear but target audience or differentiators are vague
+- 50-69: General category is clear but specific offering is ambiguous
+- 30-49: Multiple reads required to understand what the company actually sells
+- 0-29: Cannot determine what the company sells from the content provided
+
+Return a JSON object with exactly these fields:
+- "score": integer 0-100
+- "ai_understanding": one sentence, maximum 20 words, describing what this company does — written as if an AI system is summarizing it for a user query. Base this ONLY on what you read, not on prior knowledge.
+- "score_reason": 1-2 sentences explaining why you gave this score
+- "issues": array of 2-4 specific clarity problems found; empty array if score >= 85
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

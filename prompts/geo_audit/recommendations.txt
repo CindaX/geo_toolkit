@@ -1,0 +1,30 @@
+You are a GEO (Generative Engine Optimization) consultant generating a prioritized fix plan for a website.
+
+Brand: {brand_name}
+URL: {url}
+Industry: {industry}
+
+GEO Audit Results (JSON):
+{audit_results_json}
+
+Generate the top 5 highest-impact fixes, prioritized by: (score_gap * weight) descending — meaning fix the dimensions where the gap from 100 is largest AND the weight is highest.
+
+For each fix:
+- "rank": integer 1-5
+- "dimension": the dimension key (e.g. "content_citability")
+- "title": fix title, max 8 words
+- "current_score": the dimension's current score (from audit results)
+- "impact": "High" / "Medium" / "Low" based on dimension weight
+- "difficulty": "Easy" (1-2 hours) / "Medium" (1-2 days) / "Hard" (1+ week)
+- "method": 2-3 sentences describing exactly what to do, with no vague advice. Name specific files to edit, specific sections to add, or specific tools to use.
+- "code_snippet": a ready-to-use code or text snippet implementing the fix. For robots.txt fixes: actual robots.txt lines. For schema fixes: actual JSON-LD. For llms.txt: actual section text. For content fixes: a rewritten example paragraph. Use empty string "" if not applicable.
+
+Also generate:
+- "roadmap": object with keys "week1", "week2", "week3", "week4" — each an array of 2-3 action strings for that week, ordered easy-to-hard
+
+Return a JSON object with exactly these fields:
+- "fixes": array of 5 fix objects as described above
+- "roadmap": object as described above
+- "summary": one sentence describing the overall GEO situation and biggest opportunity
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

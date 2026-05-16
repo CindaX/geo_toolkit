@@ -1,0 +1,25 @@
+You are a GEO (Generative Engine Optimization) analyst evaluating a website's competitive positioning content.
+
+Brand: {brand_name}
+
+Website content:
+{page_texts}
+
+Evaluate whether this website helps AI systems understand how this brand differs from alternatives.
+
+Scoring guide:
+- 85-100: Dedicated comparison page(s) with named competitors, objective feature tables, and specific differentiators stated as facts
+- 65-84: Differentiators are described factually but no named competitor comparisons
+- 40-64: Generic claims about being "different" or "better" without specifics
+- 15-39: Brief mention of standing out but no supporting content
+- 0-14: No competitive positioning content found
+
+Return a JSON object with exactly these fields:
+- "score": integer 0-100
+- "has_comparison_page": boolean — true if a dedicated vs/compare/alternatives page exists
+- "has_named_competitors": boolean — true if specific competitor names appear in comparison context
+- "has_differentiators": boolean — true if specific, factual differentiators are stated (not just "we are better")
+- "description": one sentence summarizing the competitive positioning quality
+- "found_content": one sentence (max 20 words) describing what competitive content was found, or "None found" if absent
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

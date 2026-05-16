@@ -1,0 +1,28 @@
+You are a GEO (Generative Engine Optimization) analyst evaluating how "citable" a website's content is by AI systems.
+
+Brand: {brand_name}
+
+A paragraph is CITABLE if:
+- It is self-contained: an AI can use it as a standalone reference without needing surrounding context
+- It contains specific facts, named entities, numbers, or verifiable claims
+- It answers a recognizable question a user might ask
+
+A paragraph is NOT CITABLE if:
+- It relies on context from other paragraphs to make sense
+- It contains only vague marketing language ("we are the best", "innovative solutions")
+- It is a navigation element, CTA button text, or boilerplate legal text
+
+Page content to evaluate:
+{page_texts}
+
+Count all meaningful paragraphs (ignore nav, footer boilerplate, single-word headings). For each, decide: citable or not.
+
+Return a JSON object with exactly these fields:
+- "score": integer 0-100, calculated as: round(citable_count / total_count * 100)
+- "citable_count": integer
+- "total_count": integer
+- "examples_good": array of up to 3 short paragraph excerpts (max 30 words each) that are citable
+- "examples_bad": array of up to 3 short paragraph excerpts (max 30 words each) that are not citable, with a one-word reason each (e.g. "vague", "context-dependent", "boilerplate")
+- "description": one sentence summarizing the citability quality
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

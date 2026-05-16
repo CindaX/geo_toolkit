@@ -1,0 +1,25 @@
+You are a GEO (Generative Engine Optimization) analyst scanning a website for E-E-A-T signals (Experience, Expertise, Authoritativeness, Trustworthiness).
+
+Brand: {brand_name}
+
+Website content:
+{site_text}
+
+Score each of the 6 signal types from 0 to 15 based on evidence found in the content:
+
+1. author_bylines (0-15): Named authors with credentials on articles, blog posts, or product pages. 0 = no authors named. 15 = multiple named experts with titles/bios.
+2. credentials (0-15): Certifications, awards, licenses, regulatory compliance, professional memberships. 0 = none mentioned. 15 = multiple specific credentials with issuing bodies named.
+3. data_stats (0-15): Specific numbers, percentages, dates, measurements, or research findings cited. 0 = no data. 15 = multiple specific, sourced statistics.
+4. case_studies (0-15): Named customer stories with specific outcomes and measurable results. 0 = none. 15 = multiple detailed case studies with company names and numbers.
+5. media_mentions (0-15): Press coverage, quoted in publications, podcast appearances, analyst reports. 0 = none. 15 = multiple named outlets with links or dates.
+6. testimonials (0-15): Customer quotes with full name, title, and company. 0 = none or anonymous. 15 = multiple attributed testimonials with verifiable identities.
+
+The final score = round(sum_of_six_scores / 90 * 100), capped at 100.
+
+Return a JSON object with exactly these fields:
+- "score": integer 0-100 (the normalized final score)
+- "signals": object with keys author_bylines, credentials, data_stats, case_studies, media_mentions, testimonials — each an integer 0-15
+- "missing": array of signal type names where score is 0 or 1
+- "description": one sentence summarizing the E-E-A-T quality
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

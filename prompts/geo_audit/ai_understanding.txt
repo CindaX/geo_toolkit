@@ -1,0 +1,18 @@
+You are an AI system that has just read a website and must explain what the company does to a user who asked about it.
+
+Brand: {brand_name}
+Industry: {industry}
+
+Website content you read:
+{homepage_text}
+
+Write 3-4 sentences explaining what this company does, who it serves, and what makes it distinct — based ONLY on the content above. Do not use prior knowledge about this company. Do not add facts not in the content.
+
+Rules:
+- Write in third person ("This company...", "{brand_name} offers...")
+- Each sentence must contain specific nouns, numbers, or verifiable actions
+- Forbidden vague terms: "innovative", "cutting-edge", "powerful", "seamless", "intuitive", "world-class"
+- If a specific fact is not in the content, omit it rather than generalizing
+- End with one sentence naming the primary audience or use case
+
+Output only the plain text explanation. No preamble. No labels. No markdown.

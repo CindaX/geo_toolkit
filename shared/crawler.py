@@ -5,6 +5,16 @@ handful of likely-relevant subpages (About / Product / Service pages),
 extracts their visible text, and returns a normalized dict. Results are
 cached on disk for 24 hours so repeated runs during development don't keep
 hitting the network.
+
+Text extraction strategy (primary → fallback):
+  1. Jina Reader API (https://r.jina.ai/) — renders JS, strips nav/cart noise,
+     returns LLM-friendly Markdown. Used for *text* content only.
+  2. httpx + BeautifulSoup — raw HTML fetch with tag stripping. Used when
+     Jina is unavailable or returns empty content, and always used to obtain
+     raw HTML (home_html / about_html) for structured-data analysis.
+
+# TODO(future): 当 Jina 限流解除后，改用 X-Remove-Selector / X-Target-Selector
+# header 在服务端剔除噪音，比客户端正则更通用。详见 Day 3 调试笔记。
 """
 
 from __future__ import annotations
@@ -32,6 +42,9 @@ _USER_AGENT: str = (
     "Mozilla/5.0 (compatible; geo-toolkit/0.1; +https://example.invalid/bot)"
 )
 
+_JINA_BASE_URL: str = "https://r.jina.ai/"
+_JINA_TIMEOUT: float = 20.0
+
 # URL path patterns we use to classify candidate links.
 _ABOUT_PATTERN = re.compile(r"/(about|company|who-we-are|team)(/|$)", re.I)
 _PRODUCT_PATTERN = re.compile(
@@ -47,7 +60,7 @@ class PageContent(TypedDict):
 
     url: str
     html: str
-    text: str
+    text: str        # Jina Markdown when available, BeautifulSoup text as fallback
 
 
 class CrawlMetadata(TypedDict, total=False):
@@ -67,10 +80,12 @@ class CrawlResult(TypedDict):
 
     url: str
     home_html: str
-    about_html: str  # "" if none found
+    home_text: str           # Jina Markdown when available, BS4 fallback
+    about_html: str          # "" if none found
     product_pages: list[PageContent]
-    combined_text: str
+    combined_text: str       # home_text + about_text + product page texts
     metadata: CrawlMetadata
+    fetch_method: dict[str, str]   # url → "jina" | "httpx"
 
 
 # --- Public API ----------------------------------------------------------
@@ -78,15 +93,14 @@ class CrawlResult(TypedDict):
 def crawl_website(url: str, max_pages: int = 5) -> CrawlResult:
     """Fetch a website and return a normalized :class:`CrawlResult`.
 
-    The crawl is best-effort: if individual subpages fail, they are skipped
-    rather than aborting the whole call. If the home page itself fails to
-    fetch, the function returns a result whose ``metadata.error`` describes
-    the failure (instead of raising).
+    Text content is fetched via Jina Reader API first (LLM-friendly Markdown,
+    JS-rendered), falling back to httpx + BeautifulSoup when Jina is unavailable.
+    Raw HTML (home_html / about_html) is always fetched via httpx so downstream
+    schema and structured-data analyzers have access to the full DOM.
 
     Args:
         url: Homepage URL (must include scheme).
         max_pages: Maximum total pages to fetch, including the homepage.
-            Must be ``>= 1``.
 
     Returns:
         A :class:`CrawlResult` dict.
@@ -101,6 +115,89 @@ def crawl_website(url: str, max_pages: int = 5) -> CrawlResult:
     result = _do_crawl(url, max_pages)
     _write_cache(url, max_pages, result)
     return result
+
+
+# --- Jina Reader ---------------------------------------------------------
+
+def _fetch_via_jina(url: str) -> str | None:
+    """Fetch *url* via Jina Reader API and return clean Markdown text.
+
+    Returns ``None`` on any error or empty response so callers can fall back
+    to httpx + BeautifulSoup without special-casing.
+    """
+    jina_url = f"{_JINA_BASE_URL}{url}"
+    try:
+        resp = httpx.get(
+            jina_url,
+            timeout=_JINA_TIMEOUT,
+            follow_redirects=True,
+            headers={
+                "X-Return-Format": "markdown",
+                "Accept": "text/plain",
+                "X-Engine": "browser",
+            },
+        )
+        if resp.status_code == 200:
+            text = resp.text.strip()
+            if text:
+                return _strip_shopify_noise(text)
+    except Exception:
+        pass
+    return None
+
+
+def _strip_shopify_noise(markdown: str) -> str:
+    """Remove Shopify cart-drawer / country-selector noise from Jina Markdown.
+
+    Shopify themes inject a hidden cart drawer and flag-based currency/country
+    switchers into the page body.  Jina serializes these DOM elements before
+    (and sometimes between) the real product content, polluting the token window.
+
+    Strategy:
+      1. Detect noise presence in the first 3 KB via known signal phrases.
+      2. Find the first real H1 heading (single '#') that sits after Jina's own
+         metadata block (~first 500 chars) and is not a known noise heading.
+         This is where the page body actually begins.
+      3. Within the extracted body, also strip any embedded
+         '## Delivery Destination' blocks (Shopify injects these per-section).
+    """
+    if not markdown or len(markdown) < 1000:
+        return markdown
+
+    _NOISE_MARKERS = [
+        "Your cart is empty",
+        "Cart is empty",
+        "Country/Region",
+        "Country / Region",
+        "Choose your country",
+    ]
+
+    has_noise = any(m.lower() in markdown[:3000].lower() for m in _NOISE_MARKERS)
+    if not has_noise:
+        return markdown
+
+    # Known noise H1 patterns — skip these when scanning for real content.
+    _NOISE_H1 = re.compile(r"^# (?:Cart|Subtotal|\[!\[)", re.IGNORECASE)
+
+    for m in re.finditer(r"^# .+", markdown, re.MULTILINE):
+        if m.start() < 500:
+            continue  # Jina always puts a metadata title here — skip it
+        if _NOISE_H1.match(m.group()):
+            continue
+        # Found the first real H1: start output here.
+        body = markdown[m.start():]
+        # Also remove any embedded "## Delivery Destination" blocks that Shopify
+        # injects into each page section (up to 3 KB of country-flag list each).
+        body = re.sub(
+            r"\n## Delivery Destination\n.{50,4000}?(?=\n## |\n# |\Z)",
+            "\n",
+            body,
+            flags=re.DOTALL,
+        )
+        return body
+
+    # Fallback: structure not recognized — return as-is.
+    return markdown
 
 
 # --- Cache ---------------------------------------------------------------
@@ -137,20 +234,22 @@ def _write_cache(url: str, max_pages: int, payload: CrawlResult) -> None:
             encoding="utf-8",
         )
     except OSError:
-        # Cache is best-effort; never fail the crawl because we couldn't write it.
         pass
 
 
 # --- Crawl implementation -----------------------------------------------
 
 def _do_crawl(url: str, max_pages: int) -> CrawlResult:
+    fetch_method: dict[str, str] = {}
     empty: CrawlResult = {
         "url": url,
         "home_html": "",
+        "home_text": "",
         "about_html": "",
         "product_pages": [],
         "combined_text": "",
         "metadata": {"crawled_at": _now_iso(), "url_count": 0},
+        "fetch_method": fetch_method,
     }
 
     with httpx.Client(
@@ -158,6 +257,7 @@ def _do_crawl(url: str, max_pages: int) -> CrawlResult:
         follow_redirects=True,
         headers={"User-Agent": _USER_AGENT},
     ) as client:
+        # Always fetch raw HTML for structured-data analyzers.
         home_html = _fetch(client, url)
         if home_html is None:
             empty["metadata"]["error"] = f"Failed to fetch home page: {url}"
@@ -165,15 +265,27 @@ def _do_crawl(url: str, max_pages: int) -> CrawlResult:
 
         home_soup = BeautifulSoup(home_html, "lxml")
         metadata = _extract_metadata(home_soup)
-        home_text = _extract_text(home_soup)
 
-        about_html, product_pages = _fetch_subpages(
-            client, base_url=url, home_soup=home_soup, max_pages=max_pages
+        # Prefer Jina text for the homepage; fall back to BeautifulSoup.
+        jina_home = _fetch_via_jina(url)
+        if jina_home:
+            home_text = jina_home
+            fetch_method[url] = "jina"
+        else:
+            home_text = _extract_text(home_soup)
+            fetch_method[url] = "httpx"
+
+        about_html, about_text, product_pages = _fetch_subpages(
+            client,
+            base_url=url,
+            home_soup=home_soup,
+            max_pages=max_pages,
+            fetch_method=fetch_method,
         )
 
         combined_chunks = [home_text]
-        if about_html:
-            combined_chunks.append(_extract_text(BeautifulSoup(about_html, "lxml")))
+        if about_text:
+            combined_chunks.append(about_text)
         for p in product_pages:
             combined_chunks.append(p["text"])
         combined_text = "\n\n".join(c for c in combined_chunks if c).strip()
@@ -185,10 +297,12 @@ def _do_crawl(url: str, max_pages: int) -> CrawlResult:
         return {
             "url": url,
             "home_html": home_html,
+            "home_text": home_text,
             "about_html": about_html,
             "product_pages": product_pages,
             "combined_text": combined_text,
             "metadata": metadata,
+            "fetch_method": fetch_method,
         }
 
 
@@ -211,8 +325,13 @@ def _fetch_subpages(
     base_url: str,
     home_soup: BeautifulSoup,
     max_pages: int,
-) -> tuple[str, list[PageContent]]:
-    """Discover and fetch up to ``max_pages-1`` About / Product subpages."""
+    fetch_method: dict[str, str],
+) -> tuple[str, str, list[PageContent]]:
+    """Discover and fetch up to ``max_pages-1`` About / Product subpages.
+
+    Returns ``(about_html, about_text, product_pages)``.
+    Text for each page is sourced from Jina when available, BeautifulSoup otherwise.
+    """
     base_host = urlparse(base_url).netloc
     seen: set[str] = {_normalize_url(base_url)}
 
@@ -239,11 +358,21 @@ def _fetch_subpages(
 
     remaining = max_pages - 1
     about_html = ""
+    about_text = ""
+
     if about_candidates and remaining > 0:
-        html = _fetch(client, about_candidates[0])
+        about_url = about_candidates[0]
+        html = _fetch(client, about_url)
         if html:
             about_html = html
             remaining -= 1
+            jina_about = _fetch_via_jina(about_url)
+            if jina_about:
+                about_text = jina_about
+                fetch_method[about_url] = "jina"
+            else:
+                about_text = _extract_text(BeautifulSoup(html, "lxml"))
+                fetch_method[about_url] = "httpx"
 
     product_pages: list[PageContent] = []
     for candidate in product_candidates:
@@ -252,11 +381,17 @@ def _fetch_subpages(
         html = _fetch(client, candidate)
         if html is None:
             continue
-        text = _extract_text(BeautifulSoup(html, "lxml"))
+        jina_page = _fetch_via_jina(candidate)
+        if jina_page:
+            text = jina_page
+            fetch_method[candidate] = "jina"
+        else:
+            text = _extract_text(BeautifulSoup(html, "lxml"))
+            fetch_method[candidate] = "httpx"
         product_pages.append({"url": candidate, "html": html, "text": text})
         remaining -= 1
 
-    return about_html, product_pages
+    return about_html, about_text, product_pages
 
 
 def _normalize_url(url: str) -> str:
@@ -293,7 +428,6 @@ def _extract_text(soup: BeautifulSoup) -> str:
     for tag in soup(["script", "style", "noscript", "nav", "footer", "header", "aside"]):
         tag.decompose()
     text = soup.get_text(separator="\n")
-    # Collapse whitespace.
     lines = (line.strip() for line in text.splitlines())
     return "\n".join(line for line in lines if line)
 

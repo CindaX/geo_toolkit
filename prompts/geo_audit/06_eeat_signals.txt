@@ -5,14 +5,52 @@ Brand: {brand_name}
 Website content:
 {site_text}
 
-Score each of the 6 signal types from 0 to 15 based on evidence found in the content:
+## SCORING ANCHORS (calibrated against real-world sites)
 
-1. author_bylines (0-15): Named authors with credentials on articles, blog posts, or product pages. 0 = no authors named. 15 = multiple named experts with titles/bios.
-2. credentials (0-15): Certifications, awards, licenses, regulatory compliance, professional memberships. 0 = none mentioned. 15 = multiple specific credentials with issuing bodies named.
-3. data_stats (0-15): Specific numbers, percentages, dates, measurements, or research findings cited. 0 = no data. 15 = multiple specific, sourced statistics.
-4. case_studies (0-15): Named customer stories with specific outcomes and measurable results. 0 = none. 15 = multiple detailed case studies with company names and numbers.
-5. media_mentions (0-15): Press coverage, quoted in publications, podcast appearances, analyst reports. 0 = none. 15 = multiple named outlets with links or dates.
-6. testimonials (0-15): Customer quotes with full name, title, and company. 0 = none or anonymous. 15 = multiple attributed testimonials with verifiable identities.
+Use these REAL examples to calibrate your scoring:
+
+**Reference Site A — NYT Cooking** (E-E-A-T = ~90/100)
+- author_bylines: 15 (named chefs with credentials on every recipe)
+- credentials: 12 (NYT brand authority, James Beard winners cited)
+- data_stats: 11 (cooking times, serving sizes, nutritional data)
+- case_studies: 9 (recipe stories with diner reactions)
+- media_mentions: 14 (NYT-wide press recognition, awards)
+- testimonials: 12 (reader reviews with verified accounts)
+
+**Reference Site B — Stripe** (E-E-A-T = ~70/100)
+- author_bylines: 10 (engineering blog has named authors with titles)
+- credentials: 13 (PCI compliance, SOC 2, multiple regulatory)
+- data_stats: 14 (volume processed, customer count, uptime metrics)
+- case_studies: 13 (named customer stories: Slack, Atlassian, Shopify)
+- media_mentions: 8 (mentioned in TechCrunch, NYT, WSJ but not on every page)
+- testimonials: 7 (customer quotes with names and companies on case study pages)
+
+**Reference Site C — typical small SaaS homepage** (E-E-A-T = ~30/100)
+- author_bylines: 2 (no blog or anonymous content)
+- credentials: 4 (maybe one badge like "SOC 2 in progress")
+- data_stats: 6 (a few stats like "1000+ customers" but unsourced)
+- case_studies: 5 (vague mentions of "customers love us")
+- media_mentions: 3 (maybe a "featured in" logo bar)
+- testimonials: 7 (a few quotes, sometimes anonymous or just first names)
+
+**Reference Site D — pure marketing landing page** (E-E-A-T = ~10/100)
+- All categories near 0-3, just product copy and CTAs.
+
+## SCORING RULES (CRITICAL)
+
+For each signal type (0-15):
+- 0: zero evidence found
+- 3-5: minimal/weak evidence (logo bar, vague claims)
+- 6-9: moderate evidence (a few specific instances)
+- 10-13: strong evidence (multiple specific, verifiable instances)
+- 14-15: best-in-class (NYT/Stripe-level depth)
+
+**IMPORTANT MINDSET:**
+- A SaaS homepage without a blog is NOT automatically 0 for author_bylines — check if leadership pages or "About" section names founders/team with bios → that's 5-8.
+- "Customer logos" displayed = moderate media_mentions credit (5-8), not 0.
+- A "trusted by" section with company names = partial credit for case_studies (5-7) even without full stories.
+- Pricing pages with specific numbers = data_stats credit.
+- Don't penalize a homepage for not having every signal — score what's actually visible.
 
 The final score = round(sum_of_six_scores / 90 * 100), capped at 100.
 

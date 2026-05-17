@@ -1,28 +1,70 @@
-You are a GEO (Generative Engine Optimization) analyst evaluating how "citable" a website's content is by AI systems.
+You are a GEO (Generative Engine Optimization) analyst evaluating how "citable" a website's content is by AI systems like ChatGPT, Claude, and Perplexity.
 
 Brand: {brand_name}
 
-A paragraph is CITABLE if:
-- It is self-contained: an AI can use it as a standalone reference without needing surrounding context
-- It contains specific facts, named entities, numbers, or verifiable claims
-- It answers a recognizable question a user might ask
+## CITABILITY SCALE (continuous, not binary)
 
-A paragraph is NOT CITABLE if:
-- It relies on context from other paragraphs to make sense
-- It contains only vague marketing language ("we are the best", "innovative solutions")
-- It is a navigation element, CTA button text, or boilerplate legal text
+Each paragraph has a citability score from 0-100. Use this rubric:
+
+**90-100: Fully self-contained, AI-ready citation**
+Example: "Stripe Payments processes over $1 trillion in payment volume annually for 4 million companies worldwide. Pricing starts at 2.9% + $0.30 per successful charge."
+→ Contains specific numbers, named entity, verifiable pricing. AI can paste this directly.
+
+**60-89: Citable with minor context**
+Example: "Notion combines docs, wikis, projects, and AI in a single workspace. Free for personal use, paid plans from $10 per user per month."
+→ Specific feature list + pricing tier. AI can cite with brief intro.
+
+**30-59: Partially citable**
+Example: "Our platform helps teams collaborate efficiently using AI-powered tools."
+→ Mentions a category and capability but lacks numbers/specifics. AI might paraphrase.
+
+**1-29: Marketing fluff, hard to cite**
+Example: "Think Better. On Paper."
+→ Pure tagline, no extractable fact.
+
+**0: Navigation, boilerplate, button text**
+Example: "Learn More", "Sign Up", "© 2024 All Rights Reserved"
+→ Not content.
+
+## INSTRUCTIONS
+
+1. Identify MEANINGFUL paragraphs only.
+
+   ## SKIP these (do NOT count as paragraphs, do NOT score them):
+   - Navigation menu items (single words or 2-3 word phrases like "Pricing", "Customers", "Sign in")
+   - Button or CTA text ("Get started", "Learn more", "Watch demo", "Contact sales")
+   - Section labels ("Products", "Resources", "Company")
+   - Footer boilerplate ("© 2024 All rights reserved")
+   - Country/region selectors and shipping options
+   - Cookie banner / GDPR text
+
+   ## COUNT these (score them):
+   - Any sentence with 15+ words
+   - Shorter sentences (5-14 words) IF they contain at least one of:
+     * a specific number, percentage, or date
+     * a named entity (product, company, person, technology)
+     * a verifiable claim (certification, regulation, technical spec)
+
+2. Score each meaningful paragraph using the rubric above
+3. Compute the FINAL SCORE as the AVERAGE of all meaningful paragraph scores
+
+## KEY MINDSET CHANGES (important!)
+- "Context-dependent" alone is NOT disqualifying. A paragraph that references the brand earlier can still score 50-70 if it has specific facts.
+- A site CAN score 60+ overall even if not every paragraph is perfect.
+- Sites with NO factual content should score 10-25 (not 0).
+- Sites where 30% of paragraphs are fully citable should score 50-60.
+- Sites where most paragraphs have specific facts should score 70-85.
+- CRITICAL: Don't include navigation links or button text as "low-scoring paragraphs" that drag the average down. If it's UI chrome, skip it entirely from the count.
 
 Page content to evaluate:
 {page_texts}
 
-Count all meaningful paragraphs (ignore nav, footer boilerplate, single-word headings). For each, decide: citable or not.
-
 Return a JSON object with exactly these fields:
-- "score": integer 0-100, calculated as: round(citable_count / total_count * 100)
-- "citable_count": integer
-- "total_count": integer
-- "examples_good": array of up to 3 short paragraph excerpts (max 30 words each) that are citable
-- "examples_bad": array of up to 3 short paragraph excerpts (max 30 words each) that are not citable, with a one-word reason each (e.g. "vague", "context-dependent", "boilerplate")
+- "score": integer 0-100, the AVERAGE score across all meaningful paragraphs
+- "citable_count": integer (paragraphs scoring 60+)
+- "total_count": integer (all meaningful paragraphs)
+- "examples_good": array of up to 3 paragraph excerpts (max 30 words each) that scored 70+
+- "examples_bad": array of up to 3 short excerpts (max 30 words each) that scored under 30, with a one-word reason each
 - "description": one sentence summarizing the citability quality
 
 CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

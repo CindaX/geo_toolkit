@@ -17,8 +17,8 @@ DIMENSION = "content_citability"
 WEIGHT = 0.20
 
 _PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "geo_audit" / "05_content_citability.txt"
-_MAX_CHARS_PER_PAGE = 2000   # per-page cap before combining
-_MAX_COMBINED = 5000         # total chars sent to Claude
+_MAX_CHARS_PER_PAGE = 5000   # capture content past mega-menus / image grids
+_MAX_COMBINED = 15000        # 3 pages × 5000
 
 
 def analyze(

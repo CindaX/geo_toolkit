@@ -40,6 +40,7 @@ def analyze(url: str, brand_name: str, homepage_text: str, **_kwargs) -> dict:
         "description": str(data.get("description", f"Factual density score: {score}/100.")),
         "details": {
             "factual_count": data.get("factual_count"),
+            "mixed_count": data.get("mixed_count"),
             "vague_count": data.get("vague_count"),
             "total_count": data.get("total_count"),
             "vague_examples": data.get("vague_examples", []),

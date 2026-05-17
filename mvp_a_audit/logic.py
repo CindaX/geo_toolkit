@@ -86,6 +86,7 @@ def prepare_inputs(url: str, brand_name: str, industry: str) -> dict:
         "homepage_html": home_html,
         "homepage_text": homepage_text,
         "site_text": site_text,
+        "product_pages": crawl.get("product_pages", []),
     }
 
 

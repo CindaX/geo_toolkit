@@ -14,14 +14,21 @@ DIMENSION = "crawler_access"
 WEIGHT = 0.10
 
 _TARGET_BOTS = ["GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended"]
-_TIMEOUT = 10
+_TIMEOUT = 15
 
 
 def analyze(url: str, **_kwargs) -> dict:
+    import time as _time
     robots_url = urljoin(url.rstrip("/") + "/", "robots.txt")
+    print(f"[crawler_access] fetching {robots_url} (timeout={_TIMEOUT}s)", flush=True)
+    t0 = _time.monotonic()
     try:
         resp = httpx.get(robots_url, timeout=_TIMEOUT, follow_redirects=True)
+        elapsed_ms = int((_time.monotonic() - t0) * 1000)
+        print(f"[crawler_access] {resp.status_code} in {elapsed_ms}ms", flush=True)
     except Exception as exc:
+        elapsed_ms = int((_time.monotonic() - t0) * 1000)
+        print(f"[crawler_access] FAILED after {elapsed_ms}ms: {exc}", flush=True)
         return _result(0, f"Could not fetch robots.txt: {exc}", [], [], _TARGET_BOTS[:])
 
     if resp.status_code == 404:

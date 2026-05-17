@@ -140,9 +140,12 @@ def _fetch_via_jina(url: str) -> str | None:
         if resp.status_code == 200:
             text = resp.text.strip()
             if text:
-                return _strip_shopify_noise(text)
+                cleaned = _strip_shopify_noise(text)
+                print(f"[CRAWLER] _fetch_via_jina returning {len(cleaned)} chars from {url}", flush=True)
+                return cleaned
     except Exception:
         pass
+    print(f"[CRAWLER] _fetch_via_jina FAILED for {url} — falling back to httpx", flush=True)
     return None
 
 
@@ -161,6 +164,7 @@ def _strip_shopify_noise(markdown: str) -> str:
       3. Within the extracted body, also strip any embedded
          '## Delivery Destination' blocks (Shopify injects these per-section).
     """
+    print(f"[STRIP] called with {len(markdown)} chars, first 50: {markdown[:50]!r}", flush=True)
     if not markdown or len(markdown) < 1000:
         return markdown
 

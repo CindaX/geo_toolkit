@@ -27,3 +27,12 @@ data/reports/
 
 # Claude Code local settings (per-machine, not for sharing)
 .claude/
+
+# Debug / session artifacts
+.audit_debug.log
+.crawl_*.html
+.crawl_*.txt
+.day3_notes.md
+
+# Scratch test scripts in project root (real tests live in tests/)
+/test_*.py

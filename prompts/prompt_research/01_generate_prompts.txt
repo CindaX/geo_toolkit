@@ -1,0 +1,65 @@
+You are a search behavior researcher generating realistic AI search queries.
+
+Brand: {brand_name}
+Industry: {industry}
+User perspective: {perspective}
+Likely competitors (for comparison-type prompts): {competitors_list}
+
+## TASK
+
+Generate EXACTLY 20 prompts that real users in the "{perspective}" segment would type into an AI assistant (ChatGPT, Claude, Perplexity) when researching products in the "{industry}" category.
+
+## DISTRIBUTION (strict — must be exactly 4 of each)
+
+1. **comparison** (4 prompts) — direct brand-vs-brand questions
+   - MAY include {brand_name} and/or any of the listed competitors
+   - Examples: "Bambu Lab vs Prusa for beginners" · "is Anycubic better than Creality"
+
+2. **recommendation** (4 prompts) — category-level "best X" questions
+   - MUST NOT include {brand_name}
+   - MUST NOT include any specific competitor name
+   - Examples: "best 3D printer under $1000" · "best 3D printer for kids"
+
+3. **problem_solving** (4 prompts) — how-to / troubleshooting questions
+   - Category-level, NO brand names
+   - Examples: "how to fix 3D printer layer adhesion" · "why is my 3D print warping"
+
+4. **feature_specific** (4 prompts) — capability-driven category queries
+   - Category-level, NO brand names
+   - Examples: "3D printers with auto bed leveling" · "quietest 3D printer for apartments"
+
+5. **buying_stage** (4 prompts) — decision / value questions
+   - MAY include {brand_name} (mix branded and generic; e.g. 2 of each)
+   - Examples: "is Bambu Lab worth the money" · "should I buy a 3D printer in 2025"
+
+## QUALITY-CONTROL PROMPT (REQUIRED)
+
+At least ONE of the 4 "recommendation" prompts MUST be a maximally generic brand-discovery query that specifies NO price, NO feature, NO use case — only the broadest category.
+
+Pattern: "best <category> brand <year>" or "top <category> brands"
+Example: "best 3D printer brand in 2025"
+
+This serves as a benchmark: if a brand can't even appear in the answer to this prompt, it has weak general AI recognition.
+
+## CONSTRAINTS
+
+- Each prompt MUST be ≤15 words
+- Each prompt MUST sound like real user typing — lowercase except proper nouns
+- DO NOT use formal phrasings like "Could you tell me..." or "What are the best..."
+- DO use natural phrasings: "best X for Y", "how to X", "X vs Y", "is X worth it"
+- Vary the specificity: some prompts narrow (use case, price band), some broad
+
+## AI CATEGORIZATION
+
+Separately, output a 2-6 word phrase describing how AI assistants would categorize {brand_name} — its mental category, not its tagline. Examples: "premium consumer 3D printer" · "enterprise team workspace" · "budget action camera".
+
+## OUTPUT FORMAT
+
+Return a JSON object with exactly these fields:
+- "ai_category": string (2-6 words)
+- "prompts": array of exactly 20 objects, each with:
+  - "id": integer 1-20
+  - "type": one of "comparison", "recommendation", "problem_solving", "feature_specific", "buying_stage"
+  - "text": string (the actual prompt, ≤15 words)
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

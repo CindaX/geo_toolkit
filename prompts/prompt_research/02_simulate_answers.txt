@@ -1,0 +1,42 @@
+You are simulating how a major AI assistant (ChatGPT, Claude, or Perplexity) would actually answer real user search queries about products in a specific industry. Your goal is to predict realistic top-3 brand citations for each prompt, based on your training knowledge of which brands are publicly associated with each query.
+
+Industry: {industry}
+Candidate brands to consider: {brands_list}
+
+(Note: the candidate brands list is a hint of which brands are relevant to this industry. You are NOT required to use only these brands — if a prompt is best answered by a brand outside the list, include it. You are NOT required to include every candidate brand in every answer — if a candidate has no public association with a specific prompt, omit it.)
+
+## QUERIES
+
+{prompts_json}
+
+## INSTRUCTIONS
+
+For each prompt, predict the top 3 brands that a major AI assistant would cite in 2026, based on your training knowledge.
+
+### Rules (strict)
+
+1. **Be realistic, not balanced.** Some prompts are dominated by 1-2 brands; others have many viable answers. Reflect reality, not fairness. Do NOT artificially balance the candidate brands across prompts.
+
+2. **Respect brand specificity.** If a prompt explicitly names brands (e.g., "Bambu Lab vs Prusa"), those named brands MUST appear in the top 3 in some order.
+
+3. **Honor your knowledge limits.** If a brand on the candidate list is UNFAMILIAR to you — i.e., you have no real public/training-data evidence of it being a notable player in this industry — OMIT it entirely. Do NOT invent reasons. Do NOT pretend to recognize unknown brands just because they appear on the candidate list. This is critical for accurate diagnosis.
+
+4. **Empty or short results are allowed.** If a prompt has no clear top-3 (too narrow / unanswerable), return fewer than 3 entries (even 0 is OK).
+
+5. **Brand naming.** When citing a candidate brand, use the EXACT spelling from the candidate list. For brands outside the list, use their canonical common name.
+
+6. **Reasons.** For each cited brand, give a ≤15-word reason explaining why an AI would mention them for THIS specific prompt (cite a feature, fact, or fit — not generic praise).
+
+7. **No self-disclosure.** You do not know which brand on the list is the "user". Treat all candidates equally.
+
+## OUTPUT FORMAT
+
+Return a JSON object with exactly these fields:
+- "results": array of objects (one per input prompt, in the same id order), each with:
+  - "id": integer (matches the input prompt id)
+  - "top_3": array of 0-3 objects, each with:
+    - "rank": integer 1, 2, or 3
+    - "brand": string (exact brand name)
+    - "reason": string (≤15 words)
+
+CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.

@@ -58,6 +58,7 @@ def _init_audit_state() -> None:
         "audit_ai_understanding": None,
         "audit_recommendations":  None,
         "audit_errors":           {},
+        "audit_prefill_applied":  False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -68,6 +69,36 @@ def _reset_audit_state() -> None:
     """Delete ONLY audit_* keys — leaves prompts_* and assets_* untouched."""
     for key in [k for k in list(st.session_state.keys()) if k.startswith("audit_")]:
         del st.session_state[key]
+
+
+def _prefill_audit_from_shared() -> None:
+    """Pull brand/url/industry from geo_shared_* on first entry to the input page.
+
+    - Brand / URL: prefill only when the local field is empty.
+    - Industry: prefill only when the user hasn't completed an audit yet
+      (audit_results empty) — protects a previous explicit dropdown choice.
+    - Flag flips to True only when something was actually applied, so a later
+      cross-tool write can still take effect on a return visit.
+    """
+    if st.session_state.audit_prefill_applied:
+        return
+
+    applied = False
+    if not st.session_state.audit_brand_name and st.session_state.get("geo_shared_brand_name"):
+        st.session_state.audit_brand_name = st.session_state.geo_shared_brand_name
+        applied = True
+    if not st.session_state.audit_url and st.session_state.get("geo_shared_url"):
+        st.session_state.audit_url = st.session_state.geo_shared_url
+        applied = True
+
+    audit_not_run = not st.session_state.audit_results
+    if audit_not_run and st.session_state.get("geo_shared_industry"):
+        if st.session_state.audit_industry != st.session_state.geo_shared_industry:
+            st.session_state.audit_industry = st.session_state.geo_shared_industry
+            applied = True
+
+    if applied:
+        st.session_state.audit_prefill_applied = True
 
 
 # ── Cross-tool CTA helper ────────────────────────────────────────────────────
@@ -81,10 +112,11 @@ def _render_assets_cta() -> None:
     """
     try:
         st.page_link(
-            "pages/2_📦_Asset_Generator.py",
+            "pages/2_Asset_Generator.py",
             label="→ Generate AI Assets to Fix These Issues",
             icon="📦",
         )
+        st.caption("Your brand details will be pre-filled automatically.")
     except Exception:
         st.info("📦 To generate AI-ready files, run Asset Generator separately.")
 
@@ -117,7 +149,13 @@ def _render_audit_welcome() -> None:
 
 
 def _render_audit_input() -> None:
+    _prefill_audit_from_shared()
+
     st.title("Enter Your Website Details")
+
+    if st.session_state.audit_prefill_applied:
+        source = st.session_state.get("geo_shared_source_tool", "another tool")
+        st.info(f"📥 Brand info imported from {source}. Review the details and proceed.")
 
     url = st.text_input(
         "Website URL *",
@@ -233,6 +271,12 @@ def _render_audit_scanning() -> None:
 
 
 def _render_audit_free_report() -> None:
+    # Export to cross-tool shared namespace (idempotent; written each render).
+    st.session_state.geo_shared_brand_name = st.session_state.audit_brand_name
+    st.session_state.geo_shared_url = st.session_state.audit_url
+    st.session_state.geo_shared_industry = st.session_state.audit_industry
+    st.session_state.geo_shared_source_tool = "Audit"
+
     score = st.session_state.audit_geo_score
     grade = st.session_state.audit_geo_grade
     results = st.session_state.audit_results
@@ -306,6 +350,12 @@ def _render_audit_free_report() -> None:
 
 
 def _render_audit_unlocked() -> None:
+    # Export to cross-tool shared namespace (idempotent; written each render).
+    st.session_state.geo_shared_brand_name = st.session_state.audit_brand_name
+    st.session_state.geo_shared_url = st.session_state.audit_url
+    st.session_state.geo_shared_industry = st.session_state.audit_industry
+    st.session_state.geo_shared_source_tool = "Audit"
+
     st.title("GEO Audit — Full Report")
     st.success("✓ Unlocked — Full diagnostics and fix plan below")
 

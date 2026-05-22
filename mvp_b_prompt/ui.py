@@ -73,6 +73,7 @@ def _init_prompts_state() -> None:
         "prompts_perspective": "B2C 消费者",
         "prompts_result":      None,
         "prompts_error":       None,
+        "prompts_prefill_applied": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -83,6 +84,48 @@ def _reset_prompts_state() -> None:
     """Delete ONLY prompts_* keys — leaves audit_* and assets_* untouched."""
     for key in [k for k in list(st.session_state.keys()) if k.startswith("prompts_")]:
         del st.session_state[key]
+
+
+def _prefill_prompts_from_shared() -> None:
+    """Pull brand/industry from geo_shared_* on first entry to the input page.
+
+    - Brand: prefill only when the local field is empty.
+    - Industry: prefill only when the user hasn't completed an analysis yet
+      (prompts_result is None) — protects a previous explicit dropdown choice.
+    """
+    if st.session_state.prompts_prefill_applied:
+        return
+
+    applied = False
+    if not st.session_state.prompts_brand_name and st.session_state.get("geo_shared_brand_name"):
+        st.session_state.prompts_brand_name = st.session_state.geo_shared_brand_name
+        applied = True
+
+    prompts_not_run = st.session_state.prompts_result is None
+    if prompts_not_run and st.session_state.get("geo_shared_industry"):
+        if st.session_state.prompts_industry != st.session_state.geo_shared_industry:
+            st.session_state.prompts_industry = st.session_state.geo_shared_industry
+            applied = True
+
+    if applied:
+        st.session_state.prompts_prefill_applied = True
+
+
+def _render_audit_cta() -> None:
+    """Link to the GEO Audit (landing page) when multi-page mode is active.
+
+    In standalone mode (`streamlit run mvp_b_prompt/app.py`), geo_toolkit_app.py
+    isn't in scope → st.page_link raises and we fall back to a passive hint.
+    """
+    try:
+        st.page_link(
+            "geo_toolkit_app.py",
+            label="🔍 Run a Full GEO Audit on Your Site",
+            icon="🔍",
+        )
+        st.caption("Your brand details will be pre-filled automatically.")
+    except Exception:
+        st.info("🔍 To audit your site's GEO health, open the GEO Audit separately.")
 
 
 # ── Step renderers ───────────────────────────────────────────────────────────
@@ -113,7 +156,13 @@ def _render_prompts_welcome() -> None:
 
 
 def _render_prompts_input() -> None:
+    _prefill_prompts_from_shared()
+
     st.title("Tell Us About Your Brand")
+
+    if st.session_state.prompts_prefill_applied:
+        source = st.session_state.get("geo_shared_source_tool", "another tool")
+        st.info(f"📥 Brand info imported from {source}. Review the details and proceed.")
 
     brand_name = st.text_input(
         "Brand Name *",
@@ -263,6 +312,11 @@ def _render_prompts_free_report() -> None:
             st.rerun()
         return
 
+    # Export to cross-tool shared namespace (idempotent).
+    st.session_state.geo_shared_brand_name = result["brand_name"]
+    st.session_state.geo_shared_industry = result["industry"]
+    st.session_state.geo_shared_source_tool = "Prompt Engine"
+
     user = result["brand_name"]
     user_sov = result["sov"].get(user, 0)
     awareness = result["ai_brand_awareness"]
@@ -353,6 +407,10 @@ def _render_prompts_free_report() -> None:
         st.rerun()
 
     st.markdown("---")
+    st.markdown("**Want to know *why* AI ranks you this way?**")
+    _render_audit_cta()
+
+    st.markdown("---")
     if st.button("Analyze Another Brand", key="prompts_btn_restart_free"):
         _reset_prompts_state()
         st.rerun()
@@ -363,6 +421,11 @@ def _render_prompts_paid_report() -> None:
     if not result:
         st.error("No result available.")
         return
+
+    # Export to cross-tool shared namespace (idempotent).
+    st.session_state.geo_shared_brand_name = result["brand_name"]
+    st.session_state.geo_shared_industry = result["industry"]
+    st.session_state.geo_shared_source_tool = "Prompt Engine"
 
     user = result["brand_name"]
     opportunities = result["opportunities"]
@@ -444,6 +507,11 @@ def _render_prompts_paid_report() -> None:
     if st.button("📅 Set Up Monthly Monitoring", type="primary", key="prompts_btn_monitor"):
         st.toast("Monthly monitoring is in private beta — we'll email you when it's live.")
 
+    st.markdown("---")
+    st.markdown("**Audit your site to see *why* AI ranks you this way:**")
+    _render_audit_cta()
+
+    st.markdown("---")
     if st.button("Analyze Another Brand", key="prompts_btn_restart_paid"):
         _reset_prompts_state()
         st.rerun()

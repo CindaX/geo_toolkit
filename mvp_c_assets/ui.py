@@ -97,6 +97,7 @@ def _init_assets_state() -> None:
         "assets_generated": {},
         "assets_errors":    {},
         "assets_zip_bytes": None,
+        "assets_prefill_applied": False,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -107,6 +108,47 @@ def _reset_assets_state() -> None:
     """Delete ONLY assets_* keys — leaves audit_* and prompts_* untouched."""
     for key in [k for k in list(st.session_state.keys()) if k.startswith("assets_")]:
         del st.session_state[key]
+
+
+def _prefill_assets_from_shared() -> None:
+    """Pull brand (q1) / url (q3) from geo_shared_* on first questionnaire entry.
+
+    Gated by the prefill_applied flag + assets_generated empty (don't blow away
+    answers if user has already generated assets in this session).
+    """
+    if st.session_state.assets_prefill_applied:
+        return
+    if st.session_state.assets_generated:
+        return  # user already ran the generator — protect their answers
+
+    answers = st.session_state.assets_answers
+    applied = False
+    if not answers.get("q1") and st.session_state.get("geo_shared_brand_name"):
+        answers["q1"] = st.session_state.geo_shared_brand_name
+        applied = True
+    if not answers.get("q3") and st.session_state.get("geo_shared_url"):
+        answers["q3"] = st.session_state.geo_shared_url
+        applied = True
+
+    if applied:
+        st.session_state.assets_prefill_applied = True
+
+
+def _render_prompts_cta() -> None:
+    """Link to the Prompt Engine page when multi-page mode is active.
+
+    In standalone mode (`streamlit run mvp_c_assets/app.py`), pages/ isn't in
+    scope → st.page_link raises and we fall back to a passive hint.
+    """
+    try:
+        st.page_link(
+            "pages/1_Prompt_Engine.py",
+            label="📊 See Where AI Recommends You (vs Competitors)",
+            icon="📊",
+        )
+        st.caption("Your brand details will be pre-filled automatically.")
+    except Exception:
+        st.info("📊 To see your AI visibility, open Prompt Engine separately.")
 
 
 # ── Step renderers ───────────────────────────────────────────────────────────
@@ -128,12 +170,19 @@ def _render_assets_welcome() -> None:
 
 
 def _render_assets_questionnaire() -> None:
+    _prefill_assets_from_shared()
+
     group_idx: int = st.session_state.assets_group_idx
     group = QUESTION_GROUPS[group_idx]
     total = len(QUESTION_GROUPS)
 
     st.progress((group_idx) / total, text=f"Step {group_idx + 1} of {total}")
     st.subheader(group["title"])
+
+    # Banner only on the first group (where the prefilled q1/q3 actually live).
+    if group_idx == 0 and st.session_state.assets_prefill_applied:
+        source = st.session_state.get("geo_shared_source_tool", "another tool")
+        st.info(f"📥 Brand info imported from {source}. Review the details and proceed.")
 
     answers: dict[str, str] = st.session_state.assets_answers
 
@@ -245,6 +294,16 @@ def _render_assets_done() -> None:
     errors: dict[str, str] = st.session_state.assets_errors
     zip_bytes: bytes | None = st.session_state.assets_zip_bytes
 
+    # Export to cross-tool shared namespace (idempotent).
+    answers = st.session_state.assets_answers
+    primary_brand = (answers.get("q1", "") or "").split(",")[0].strip()
+    primary_url = (answers.get("q3", "") or "").strip()
+    if primary_brand:
+        st.session_state.geo_shared_brand_name = primary_brand
+    if primary_url:
+        st.session_state.geo_shared_url = primary_url
+    st.session_state.geo_shared_source_tool = "Asset Generator"
+
     st.title("Your GEO Assets Are Ready")
 
     if errors:
@@ -271,6 +330,10 @@ def _render_assets_done() -> None:
         with st.expander(filename):
             lang = "json" if filename.endswith(".json") else "markdown" if filename.endswith(".md") else "text"
             st.code(content, language=lang)
+
+    st.markdown("---")
+    st.markdown("**Now find out where AI recommends you — and where it doesn't:**")
+    _render_prompts_cta()
 
     st.markdown("---")
     if st.button("Start Over", key="assets_btn_restart"):

@@ -41,6 +41,12 @@ _REQUEST_TIMEOUT: float = 10.0
 _USER_AGENT: str = (
     "Mozilla/5.0 (compatible; geo-toolkit/0.1; +https://example.invalid/bot)"
 )
+# Real-browser UA used as the final WAF-fallback when both the bot UA and
+# httpx's default UA get blocked (e.g. by Shopify/Cloudflare anti-bot rules).
+_CHROME_UA: str = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
 
 _JINA_BASE_URL: str = "https://r.jina.ai/"
 _JINA_TIMEOUT: float = 20.0
@@ -311,16 +317,46 @@ def _do_crawl(url: str, max_pages: int) -> CrawlResult:
 
 
 def _fetch(client: httpx.Client, url: str) -> str | None:
-    """Fetch ``url`` and return the body text, or ``None`` on any failure."""
-    try:
-        resp = client.get(url)
-        resp.raise_for_status()
-    except (httpx.HTTPError, ValueError):
-        return None
-    ctype = resp.headers.get("content-type", "")
-    if "html" not in ctype.lower() and ctype:
-        return None
-    return resp.text
+    """Fetch ``url`` and return the body text, or ``None`` on any failure.
+
+    Implements a 3-step User-Agent fallback chain to handle sites with
+    anti-bot WAFs that reject specific UA strings (Shopify/Cloudflare):
+      1. Shared client with our bot UA (preferred — keeps connection pool)
+      2. Standalone httpx with no UA override (sends httpx default)
+      3. Standalone httpx with a real Chrome on macOS UA
+
+    Returns the body of the first 2xx HTML response. Returns None if all
+    3 attempts fail or the response is non-HTML.
+    """
+    attempts = [
+        ("bot",    _USER_AGENT),
+        ("no-ua",  None),
+        ("chrome", _CHROME_UA),
+    ]
+    for i, (label, ua) in enumerate(attempts, start=1):
+        try:
+            if i == 1:
+                resp = client.get(url)
+            else:
+                headers = {"User-Agent": ua} if ua else None
+                resp = httpx.get(
+                    url,
+                    timeout=_REQUEST_TIMEOUT,
+                    follow_redirects=True,
+                    headers=headers,
+                )
+            status = resp.status_code
+            print(f"[FETCH] {url} attempt {i}/3 ua={label} → {status}", flush=True)
+            if not (200 <= status < 300):
+                continue
+            ctype = resp.headers.get("content-type", "")
+            if "html" not in ctype.lower() and ctype:
+                return None
+            return resp.text
+        except (httpx.HTTPError, ValueError) as exc:
+            print(f"[FETCH] {url} attempt {i}/3 ua={label} → EXC {type(exc).__name__}", flush=True)
+            continue
+    return None
 
 
 def _fetch_subpages(

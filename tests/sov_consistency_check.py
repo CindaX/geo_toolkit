@@ -23,9 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from mvp_b_prompt.logic import run_analysis  # noqa: E402
 
 BRAND = "Bambu Lab"
-INDUSTRY = "消费电子 / 3D 打印机"
+INDUSTRY = "Consumer Electronics / 3D Printers"
 COMPETITORS = ["Prusa Research", "Creality", "Flsun3D"]
-PERSPECTIVE = "B2C 消费者"
+PERSPECTIVE = "B2C Consumer"
 N_RUNS = 3
 
 

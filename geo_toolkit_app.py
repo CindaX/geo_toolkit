@@ -22,8 +22,8 @@ from mvp_b_prompt.ui import render_prompts_page
 from mvp_c_assets.ui import render_assets_page
 
 st.set_page_config(
-    page_title="GEO Toolkit",
-    page_icon="🌍",
+    page_title="GEO Audit",
+    page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded",
 )

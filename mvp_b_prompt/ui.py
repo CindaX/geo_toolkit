@@ -32,18 +32,18 @@ from mvp_b_prompt.logic import (
 
 _INDUSTRIES = [
     "SaaS",
-    "电商 / E-commerce",
-    "服务业 / Professional Services",
-    "制造业 / Manufacturing",
-    "消费电子 / Consumer Electronics",
-    "媒体内容 / Media & Content",
-    "其他 / Other",
+    "E-commerce",
+    "Professional Services",
+    "Manufacturing",
+    "Consumer Electronics",
+    "Media & Content",
+    "Other",
 ]
 
 _PERSPECTIVES = [
-    "B2C 消费者",
-    "B2B 决策者",
-    "开发者",
+    "B2C Consumer",
+    "B2B Decision Maker",
+    "Developer",
 ]
 
 _TYPE_LABELS: dict[str, str] = {
@@ -70,7 +70,7 @@ def _init_prompts_state() -> None:
         "prompts_brand_name":  "",
         "prompts_industry":    "SaaS",
         "prompts_competitors": "",
-        "prompts_perspective": "B2C 消费者",
+        "prompts_perspective": "B2C Consumer",
         "prompts_result":      None,
         "prompts_error":       None,
         "prompts_prefill_applied": False,
@@ -361,7 +361,7 @@ def _render_prompts_free_report() -> None:
             for b, s in result["position_scores"].items()
         ]
     )
-    st.dataframe(ps_df, hide_index=True, use_container_width=True)
+    st.dataframe(ps_df, hide_index=True, width="stretch")
 
     st.markdown("---")
     st.markdown(f"### 🎯 {user}'s Strength by Query Type")
@@ -372,7 +372,7 @@ def _render_prompts_free_report() -> None:
             for t, v in cat.items()
         ]
     )
-    st.dataframe(cat_df, hide_index=True, use_container_width=True)
+    st.dataframe(cat_df, hide_index=True, width="stretch")
 
     weakest = min(cat.items(), key=lambda kv: kv[1]) if cat else None
     strongest = max(cat.items(), key=lambda kv: kv[1]) if cat else None
@@ -460,7 +460,7 @@ def _render_prompts_paid_report() -> None:
                 f"{user} rank": f"#{c['user_rank']}" if c.get("user_rank") else "ABSENT",
                 "Top 3 in answer": " > ".join(c["top_3_brands"][:3]),
             })
-        st.dataframe(pd.DataFrame(cmp_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(cmp_rows), hide_index=True, width="stretch")
 
     st.markdown("---")
     st.markdown("### 📋 Full 20-Prompt Simulation")
@@ -476,7 +476,7 @@ def _render_prompts_paid_report() -> None:
             "Prompt": s.get("text", ""),
             "Top 3 (AI predicts)": top_3_str or "—",
         })
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
     with st.expander("See per-citation reasons (why AI mentions each brand)"):
         for s in simulation:

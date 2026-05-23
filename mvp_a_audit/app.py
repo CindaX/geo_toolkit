@@ -15,8 +15,8 @@ from mvp_a_audit.ui import render_audit_page
 
 def main() -> None:
     st.set_page_config(
-        page_title="GEO Audit Report",
-        page_icon="📊",
+        page_title="GEO Audit",
+        page_icon="🔍",
         layout="centered",
     )
     render_audit_page()

@@ -15,8 +15,8 @@ from mvp_b_prompt.ui import render_prompts_page
 
 def main() -> None:
     st.set_page_config(
-        page_title="Prompt Opportunity Engine",
-        page_icon="🎯",
+        page_title="Prompt Engine",
+        page_icon="📊",
         layout="centered",
     )
     render_prompts_page()

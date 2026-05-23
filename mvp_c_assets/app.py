@@ -15,8 +15,8 @@ from mvp_c_assets.ui import render_assets_page
 
 def main() -> None:
     st.set_page_config(
-        page_title="GEO Asset Generator",
-        page_icon="🌐",
+        page_title="Asset Generator",
+        page_icon="📦",
         layout="centered",
     )
     render_assets_page()

@@ -27,9 +27,9 @@ from mvp_a_audit.logic import (
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 _INDUSTRIES = [
-    "SaaS", "电商 / E-commerce", "服务业 / Professional Services",
-    "制造业 / Manufacturing", "媒体内容 / Media & Content",
-    "教育 / Education", "医疗 / Healthcare", "金融 / Finance", "其他 / Other",
+    "SaaS", "E-commerce", "Professional Services",
+    "Manufacturing", "Media & Content",
+    "Education", "Healthcare", "Finance", "Other",
 ]
 
 _DIM_LABELS: dict[str, str] = {
@@ -282,7 +282,12 @@ def _render_audit_free_report() -> None:
     results = st.session_state.audit_results
     ai_understanding = st.session_state.audit_ai_understanding
 
-    st.title("Your GEO Audit Report")
+    # Hero — frames the result as a "report" rather than a raw tool output.
+    st.markdown("# Your AI Visibility Report")
+    st.caption(
+        f"Analyzing {st.session_state.audit_url} • {st.session_state.audit_brand_name}"
+    )
+    st.divider()
 
     col_score, col_grade = st.columns([1, 2])
     with col_score:

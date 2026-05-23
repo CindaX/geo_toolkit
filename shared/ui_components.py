@@ -168,3 +168,21 @@ def render_loading(message: str = "Working...") -> Iterator[None]:
 
     with st.spinner(message):
         yield
+
+
+# --- Footer --------------------------------------------------------------
+
+def render_footer() -> None:
+    """Shared bottom-of-page footer with brand line + secondary links."""
+    import streamlit as st
+
+    st.divider()
+    cols = st.columns([3, 1, 1, 1])
+    with cols[0]:
+        st.caption("© 2026 GEO Toolkit · AI Visibility Suite")
+    with cols[1]:
+        st.caption("Privacy")
+    with cols[2]:
+        st.caption("Terms")
+    with cols[3]:
+        st.caption("Contact")

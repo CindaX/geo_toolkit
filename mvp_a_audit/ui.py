@@ -14,6 +14,7 @@ import streamlit as st
 
 from shared._openrouter import get_openrouter_client
 from shared.claude_client import reset_usage_stats
+from shared.ui_components import render_footer
 
 from mvp_a_audit.logic import (
     ANALYZERS,
@@ -151,7 +152,10 @@ def _render_audit_welcome() -> None:
 def _render_audit_input() -> None:
     _prefill_audit_from_shared()
 
-    st.title("Enter Your Website Details")
+    # Hero — viral entry framing.
+    st.markdown("# Is your brand visible to AI?")
+    st.markdown("Find out in 60 seconds. Free. No signup.")
+    st.divider()
 
     if st.session_state.audit_prefill_applied:
         source = st.session_state.get("geo_shared_source_tool", "another tool")
@@ -315,28 +319,33 @@ def _render_audit_free_report() -> None:
     st.markdown("---")
 
     st.markdown("### Dimension Scores")
-    cols = st.columns(2)
-    for i, (key, _) in enumerate(ANALYZERS):
-        result = results.get(key, {})
-        dim_score = result.get("score")
-        description = result.get("description", "")
-        error = result.get("error")
-        weight_pct = int(_WEIGHTS.get(key, 0) * 100)
+    n_cols = 4
+    for row_start in range(0, len(ANALYZERS), n_cols):
+        row_items = ANALYZERS[row_start:row_start + n_cols]
+        cols = st.columns(n_cols)
+        for col_idx, (key, _) in enumerate(row_items):
+            result = results.get(key, {})
+            dim_score = result.get("score")
+            description = result.get("description", "") or ""
+            error = result.get("error")
+            label = _DIM_LABELS.get(key, key)
 
-        with cols[i % 2]:
-            with st.container(border=True):
-                label = _DIM_LABELS.get(key, key)
+            with cols[col_idx]:
                 if dim_score is None:
-                    st.markdown(f"**{label}** _(weight: {weight_pct}%)_")
-                    st.markdown("❌ Scan failed")
+                    st.metric(label, "—", delta="❌ Failed", delta_color="off")
                     if error:
-                        with st.expander("Error details"):
+                        with st.expander("Error"):
                             st.code(error[:500], language="text")
                 else:
-                    color = "🟢" if dim_score >= 70 else "🟡" if dim_score >= 40 else "🔴"
-                    st.markdown(f"**{label}** _(weight: {weight_pct}%)_")
-                    st.markdown(f"{color} **{dim_score}/100**")
-                    st.caption(description)
+                    if dim_score >= 60:
+                        badge = "🟢 Good"
+                    elif dim_score >= 40:
+                        badge = "🟡 Fair"
+                    else:
+                        badge = "🔴 Needs work"
+                    st.metric(label, f"{dim_score}", delta=badge, delta_color="off")
+                    short_desc = description[:80] + ("…" if len(description) > 80 else "")
+                    st.caption(short_desc)
 
     st.markdown("---")
     st.markdown("### Ready to Fix These Issues?")
@@ -463,3 +472,4 @@ def render_audit_page() -> None:
         _render_audit_free_report()
     elif step == "unlocked":
         _render_audit_unlocked()
+    render_footer()

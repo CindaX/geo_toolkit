@@ -28,6 +28,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Sidebar brand header — rendered before st.navigation's tool list.
+with st.sidebar:
+    st.markdown("### 🌍 GEO Toolkit")
+    st.caption("AI Visibility Suite")
+    st.divider()
+
 pg = st.navigation([
     st.Page(render_audit_page,   title="GEO Audit",       icon="🔍", default=True, url_path="audit"),
     st.Page(render_prompts_page, title="Prompt Engine",   icon="📊", url_path="prompts"),

@@ -22,6 +22,7 @@ from mvp_c_assets.logic import (
     generate_schema_json,
 )
 from shared._openrouter import get_openrouter_client
+from shared.ui_components import render_footer
 
 # ── Asset task registry ───────────────────────────────────────────────────────
 
@@ -154,7 +155,11 @@ def _render_prompts_cta() -> None:
 # ── Step renderers ───────────────────────────────────────────────────────────
 
 def _render_assets_welcome() -> None:
-    st.title("GEO Asset Generator")
+    # Hero — viral entry framing.
+    st.markdown("# Make your brand AI-ready.")
+    st.markdown("Generate 6 AI-optimized files in 5 minutes.")
+    st.divider()
+
     st.markdown(
         "Answer 15 questions about your brand and receive **6 AI-generated files** "
         "that help AI search engines (ChatGPT, Perplexity, Gemini) understand and "
@@ -357,3 +362,4 @@ def render_assets_page() -> None:
         _render_assets_generating()
     elif step == "done":
         _render_assets_done()
+    render_footer()

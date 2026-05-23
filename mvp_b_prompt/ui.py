@@ -13,6 +13,7 @@ import streamlit as st
 
 from shared._openrouter import get_openrouter_client
 from shared.claude_client import get_usage_stats, reset_usage_stats
+from shared.ui_components import render_footer
 
 from mvp_b_prompt.logic import (
     check_control_prompt,
@@ -158,7 +159,10 @@ def _render_prompts_welcome() -> None:
 def _render_prompts_input() -> None:
     _prefill_prompts_from_shared()
 
-    st.title("Tell Us About Your Brand")
+    # Hero — viral entry framing.
+    st.markdown("# What is AI saying about your brand?")
+    st.markdown("Discover what users are searching for. Compare vs competitors.")
+    st.divider()
 
     if st.session_state.prompts_prefill_applied:
         source = st.session_state.get("geo_shared_source_tool", "another tool")
@@ -533,3 +537,4 @@ def render_prompts_page() -> None:
         _render_prompts_free_report()
     elif step == "paid":
         _render_prompts_paid_report()
+    render_footer()

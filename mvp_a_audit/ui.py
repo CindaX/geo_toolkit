@@ -112,7 +112,7 @@ def _render_assets_cta() -> None:
     """
     try:
         st.page_link(
-            "pages/2_Asset_Generator.py",
+            "assets",
             label="→ Generate AI Assets to Fix These Issues",
             icon="📦",
         )

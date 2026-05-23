@@ -119,7 +119,7 @@ def _render_audit_cta() -> None:
     """
     try:
         st.page_link(
-            "geo_toolkit_app.py",
+            "audit",
             label="🔍 Run a Full GEO Audit on Your Site",
             icon="🔍",
         )

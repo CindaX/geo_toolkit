@@ -142,7 +142,7 @@ def _render_prompts_cta() -> None:
     """
     try:
         st.page_link(
-            "pages/1_Prompt_Engine.py",
+            "prompts",
             label="📊 See Where AI Recommends You (vs Competitors)",
             icon="📊",
         )

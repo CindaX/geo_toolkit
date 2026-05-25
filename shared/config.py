@@ -1,24 +1,16 @@
 """Configuration and secrets loading.
 
 All LLM access is routed through OpenRouter, so a single
-``OPENROUTER_API_KEY`` in ``.env`` covers Claude, GPT-4o, and Perplexity.
-:func:`get_openrouter_key` reads it lazily and raises a friendly
-:class:`ConfigError` if the key is missing — never a raw ``KeyError``.
+``OPENROUTER_API_KEY`` in either ``.streamlit/secrets.toml`` (Streamlit Cloud)
+or ``.env`` (local dev) covers Claude, GPT-4o, and Perplexity.
+:func:`get_openrouter_key` reads it lazily via :mod:`shared.secrets` and
+raises a friendly :class:`ConfigError` if the key is missing — never a raw
+``KeyError``.
 """
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
-from dotenv import load_dotenv
-
-from shared import PROJECT_ROOT
-
-# Load .env from the project root once, at import time. ``override=False`` so
-# that real environment variables (e.g. set by CI) take precedence over .env.
-_ENV_PATH: Path = PROJECT_ROOT / ".env"
-load_dotenv(_ENV_PATH, override=False)
+from shared.secrets import get_secret
 
 
 # --- OpenRouter endpoint -------------------------------------------------
@@ -66,16 +58,23 @@ class ConfigError(RuntimeError):
 # --- Internal helpers ----------------------------------------------------
 
 def _require_env(var_name: str, *, hint: str) -> str:
-    """Return the env var value, or raise a friendly :class:`ConfigError`.
+    """Return a secret value from layered sources, or raise.
+
+    Lookup order (via :func:`shared.secrets.get_secret`):
+      1. ``st.secrets[var_name]`` — Streamlit Cloud production
+      2. project-root ``.env`` (python-dotenv) — local dev
+      3. ``os.environ`` — CI / shell-set
+
+    Empty strings are treated as missing.
 
     Raises:
-        ConfigError: If the variable is unset or empty.
+        ConfigError: If the variable is unset or empty in all sources.
     """
-    value = os.environ.get(var_name, "").strip()
+    value = (get_secret(var_name) or "").strip()
     if not value:
         raise ConfigError(
-            f"Missing required environment variable {var_name!r} ({hint}). "
-            f"Add it to your .env file (see .env.example)."
+            f"Missing required secret {var_name!r} ({hint}). "
+            f"Set it in .streamlit/secrets.toml (Streamlit Cloud) or .env (local dev)."
         )
     return value
 
@@ -93,17 +92,17 @@ def get_openrouter_key() -> str:
 def get_openrouter_referer() -> str:
     """Return the HTTP-Referer header value for OpenRouter attribution.
 
-    Reads ``OPENROUTER_REFERER`` from the environment; falls back to the
+    Reads ``OPENROUTER_REFERER`` via layered secrets; falls back to the
     default GitHub URL if unset. This field is optional — OpenRouter uses
     it for its public model-usage leaderboard only.
     """
-    return os.environ.get("OPENROUTER_REFERER", "").strip() or _OPENROUTER_REFERER_DEFAULT
+    return (get_secret("OPENROUTER_REFERER") or "").strip() or _OPENROUTER_REFERER_DEFAULT
 
 
 def get_openrouter_app_name() -> str:
     """Return the X-Title header value for OpenRouter attribution.
 
-    Reads ``OPENROUTER_APP_NAME`` from the environment; falls back to
+    Reads ``OPENROUTER_APP_NAME`` via layered secrets; falls back to
     ``"geo_toolkit"`` if unset.
     """
-    return os.environ.get("OPENROUTER_APP_NAME", "").strip() or _OPENROUTER_APP_NAME_DEFAULT
+    return (get_secret("OPENROUTER_APP_NAME") or "").strip() or _OPENROUTER_APP_NAME_DEFAULT

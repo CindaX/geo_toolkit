@@ -155,6 +155,15 @@ def _render_prompts_cta() -> None:
 # ── Step renderers ───────────────────────────────────────────────────────────
 
 def _render_assets_welcome() -> None:
+    # Email gate — must complete an Audit first (which is where we capture it).
+    if not st.session_state.get("geo_shared_email_captured"):
+        st.warning("Please complete the GEO Audit first to access this tool.")
+        try:
+            st.page_link("audit", label="← Go to GEO Audit", icon="🔍")
+        except Exception:
+            st.info("🔍 Open the GEO Audit to get started.")
+        st.stop()
+
     # Hero — viral entry framing.
     st.markdown("# Make your brand AI-ready.")
     st.markdown("Generate 6 AI-optimized files in 5 minutes.")

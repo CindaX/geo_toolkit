@@ -159,6 +159,15 @@ def _render_prompts_welcome() -> None:
 def _render_prompts_input() -> None:
     _prefill_prompts_from_shared()
 
+    # Email gate — must complete an Audit first (which is where we capture it).
+    if not st.session_state.get("geo_shared_email_captured"):
+        st.warning("Please complete the GEO Audit first to access this tool.")
+        try:
+            st.page_link("audit", label="← Go to GEO Audit", icon="🔍")
+        except Exception:
+            st.info("🔍 Open the GEO Audit to get started.")
+        st.stop()
+
     # Hero — viral entry framing.
     st.markdown("# What is AI saying about your brand?")
     st.markdown("Discover what users are searching for. Compare vs competitors.")

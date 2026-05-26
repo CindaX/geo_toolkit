@@ -14,6 +14,8 @@ import streamlit as st
 
 from shared._openrouter import get_openrouter_client
 from shared.claude_client import reset_usage_stats
+from shared.email_capture import save_email
+from shared.rate_limit import check_and_record
 from shared.ui_components import render_footer
 
 from mvp_a_audit.logic import (
@@ -154,8 +156,27 @@ def _render_audit_input() -> None:
 
     # Hero — viral entry framing.
     st.markdown("# Is your brand visible to AI?")
-    st.markdown("Find out in 60 seconds. Free. No signup.")
+    st.markdown("Find out in 60 seconds. Free for 1 audit per hour.")
     st.divider()
+
+    # Email gate — captured once, shared across all 3 tools via geo_shared_*.
+    if not st.session_state.get("geo_shared_email_captured"):
+        st.markdown("### 📧 Get your free GEO Audit")
+        st.markdown("Enter your email to start. We'll send you GEO tips and updates.")
+        email = st.text_input(
+            "Email *",
+            key="audit_email_input",
+            placeholder="you@example.com",
+        )
+        if st.button("Start Free Audit →", type="primary", key="audit_email_submit"):
+            if not email or "@" not in email or "." not in email:
+                st.error("Please enter a valid email address.")
+                st.stop()
+            st.session_state["geo_shared_email"] = email
+            st.session_state["geo_shared_email_captured"] = True
+            save_email(email, source="audit")
+            st.rerun()
+        st.stop()  # block the rest of the form until email captured
 
     if st.session_state.audit_prefill_applied:
         source = st.session_state.get("geo_shared_source_tool", "another tool")
@@ -209,6 +230,25 @@ def _render_audit_input() -> None:
 
 
 def _render_audit_scanning() -> None:
+    # Rate limit — 1 audit / hour / IP. Check before any LLM work happens.
+    try:
+        headers = getattr(st.context, "headers", None) or {}
+        ip = headers.get("x-forwarded-for", "unknown") or "unknown"
+        if "," in ip:
+            ip = ip.split(",")[0].strip()
+    except Exception:
+        ip = "unknown"
+
+    allowed, retry_after = check_and_record(ip)
+    if not allowed:
+        mins = max(retry_after // 60, 1)
+        st.error(f"⏰ Rate limit reached. Please try again in {mins} minutes.")
+        st.markdown("This limit protects free users. Premium tier coming soon!")
+        if st.button("← Back to input", key="audit_btn_rate_back"):
+            st.session_state.audit_step = "input"
+            st.rerun()
+        st.stop()
+
     st.title("Scanning Your Website…")
     st.markdown("Running 8 GEO dimensions in parallel. Usually takes 20–60 seconds.")
 

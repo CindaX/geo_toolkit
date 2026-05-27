@@ -145,12 +145,6 @@ def _render_prompts_welcome() -> None:
         "- How AI categorizes your brand\n"
         "- Your strength across 5 query types"
     )
-    st.markdown("**Unlock for $49:**")
-    st.markdown(
-        "- Top 5 priority gaps with specific content actions\n"
-        "- Full 20-prompt simulation with reasons per citation\n"
-        "- Monthly monitoring setup"
-    )
     st.markdown("---")
     if st.button("Start Free Analysis →", type="primary", key="prompts_btn_start"):
         st.session_state.prompts_step = "input"
@@ -416,7 +410,7 @@ def _render_prompts_free_report() -> None:
         f"Unlock **{n_opp} priority opportunities** where competitors are winning answers you should be in — "
         "with specific page titles, comparison axes, and SEO actions you can ship this quarter."
     )
-    if st.button(f"🔓 Unlock Top {n_opp} Opportunities — $49", type="primary", key="prompts_btn_unlock"):
+    if st.button(f"🔓 Unlock Top {n_opp} Opportunities", type="primary", key="prompts_btn_unlock"):
         st.session_state.prompts_step = "paid"
         st.rerun()
 

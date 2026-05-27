@@ -123,13 +123,6 @@ def _render_audit_welcome() -> None:
         "- Scores across 8 dimensions\n"
         "- **'What AI thinks you do'** — the viral diagnostic"
     )
-    st.markdown("**Unlock for $19:**")
-    st.markdown(
-        "- Top-5 prioritized fix recommendations\n"
-        "- Ready-to-use code snippets (robots.txt, JSON-LD, llms.txt)\n"
-        "- 30-day improvement roadmap\n"
-        "- Link to generate all 6 GEO asset files"
-    )
     st.markdown("---")
     if st.button("Start Free Audit →", type="primary", key="audit_btn_start"):
         st.session_state.audit_step = "input"

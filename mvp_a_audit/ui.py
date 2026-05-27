@@ -299,46 +299,6 @@ def _render_audit_free_report() -> None:
     st.session_state.geo_shared_industry = st.session_state.audit_industry
     st.session_state.geo_shared_source_tool = "Audit"
 
-    # Detect Stripe payment-success callback (Stripe success_url ends in ?paid=true).
-    is_paid = (st.query_params.get("paid") == "true")
-
-    # Post-payment block — renders above the normal report so it's the first
-    # thing the user sees when redirected back from Stripe Checkout.
-    if is_paid:
-        if not st.session_state.get("post_payment_celebrated"):
-            st.balloons()
-            st.session_state["post_payment_celebrated"] = True
-        st.success("✅ Payment successful — your detailed PDF report is ready.")
-        if st.session_state.audit_results:
-            try:
-                pdf_dict = audit_result_to_pdf_dict(
-                    audit_results=st.session_state.audit_results,
-                    geo_score=st.session_state.audit_geo_score,
-                    ai_understanding=st.session_state.audit_ai_understanding,
-                )
-                pdf_bytes = generate_audit_pdf(
-                    pdf_dict,
-                    brand_name=st.session_state.audit_brand_name,
-                    url=st.session_state.audit_url,
-                )
-                safe_slug = (st.session_state.audit_brand_name or "brand").lower().replace(" ", "_")
-                st.download_button(
-                    "📄 Download Your Detailed PDF Report",
-                    data=pdf_bytes,
-                    file_name=f"geo_audit_{safe_slug}.pdf",
-                    mime="application/pdf",
-                    type="primary",
-                    key="audit_btn_pdf_paid_download",
-                )
-            except Exception as exc:
-                st.error(f"PDF generation failed: {type(exc).__name__}: {exc}")
-        else:
-            st.warning(
-                "We couldn't find your audit result in this session. "
-                "Please re-run the audit; your PDF will regenerate."
-            )
-        st.divider()
-
     score = st.session_state.audit_geo_score
     grade = st.session_state.audit_geo_grade
     results = st.session_state.audit_results
@@ -405,37 +365,39 @@ def _render_audit_free_report() -> None:
                     short_desc = description[:80] + ("…" if len(description) > 80 else "")
                     st.caption(short_desc)
 
-    if not is_paid:
-        st.divider()
-        st.markdown("### 🚀 Get more from your GEO Audit")
+    # Stripe upgrade CTAs — payment success is handled at the entry-point
+    # level (render_audit_page → _render_post_payment), so when we reach
+    # here we know ?paid=true is NOT set.
+    st.divider()
+    st.markdown("### 🚀 Get more from your GEO Audit")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"#### 🎯 {PRICE_AUDIT_FULL_DISPLAY} one-time")
-            st.markdown(
-                "- Detailed PDF report (downloadable)\n"
-                "- All 8 dimensions deep-dive\n"
-                "- Specific fixes for each gap"
-            )
-            st.link_button(
-                f"🎯 Get Full Report — {PRICE_AUDIT_FULL_DISPLAY}",
-                PAYMENT_LINK_AUDIT_FULL,
-                type="secondary",
-                width="stretch",
-            )
-        with col2:
-            st.markdown(f"#### 🚀 {PRICE_PRO_MONTHLY_DISPLAY}")
-            st.markdown(
-                "- Weekly automated re-audits\n"
-                "- Continuous monitoring + alerts\n"
-                "- All Prompt + Asset features"
-            )
-            st.link_button(
-                f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
-                PAYMENT_LINK_PRO_MONTHLY,
-                type="primary",
-                width="stretch",
-            )
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"#### 🎯 {PRICE_AUDIT_FULL_DISPLAY} one-time")
+        st.markdown(
+            "- Detailed PDF report (downloadable)\n"
+            "- All 8 dimensions deep-dive\n"
+            "- Specific fixes for each gap"
+        )
+        st.link_button(
+            f"🎯 Get Full Report — {PRICE_AUDIT_FULL_DISPLAY}",
+            PAYMENT_LINK_AUDIT_FULL,
+            type="secondary",
+            width="stretch",
+        )
+    with col2:
+        st.markdown(f"#### 🚀 {PRICE_PRO_MONTHLY_DISPLAY}")
+        st.markdown(
+            "- Weekly automated re-audits\n"
+            "- Continuous monitoring + alerts\n"
+            "- All Prompt + Asset features"
+        )
+        st.link_button(
+            f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
+            PAYMENT_LINK_PRO_MONTHLY,
+            type="primary",
+            width="stretch",
+        )
 
     st.markdown("---")
     if st.button("Audit Another Site", key="audit_btn_restart_free"):
@@ -443,11 +405,93 @@ def _render_audit_free_report() -> None:
         st.rerun()
 
 
+# ── Stripe payment-success bypass ────────────────────────────────────────────
+
+def _render_post_payment() -> None:
+    """Stripe payment-success page — shown when URL has ?paid=true.
+
+    Two modes:
+      - Session alive (audit_results in state): generate + offer PDF download.
+      - Session lost (empty state, common after Stripe redirect or incognito):
+        show "we'll email it" fallback + a button to re-run the audit.
+
+    Bypasses the email gate and rate limit on purpose — the user already paid.
+    """
+    if not st.session_state.get("post_payment_shown_global"):
+        st.balloons()
+        st.session_state["post_payment_shown_global"] = True
+    st.success("✅ Payment successful! Thank you for your purchase.")
+    st.markdown("---")
+
+    audit_results = st.session_state.get("audit_results") or {}
+    brand_name = st.session_state.get("audit_brand_name", "") or ""
+    url = st.session_state.get("audit_url", "") or ""
+
+    if audit_results and brand_name:
+        st.markdown("### 📄 Your detailed PDF report is ready")
+        try:
+            pdf_dict = audit_result_to_pdf_dict(
+                audit_results=audit_results,
+                geo_score=st.session_state.get("audit_geo_score"),
+                ai_understanding=st.session_state.get("audit_ai_understanding"),
+            )
+            pdf_bytes = generate_audit_pdf(pdf_dict, brand_name=brand_name, url=url)
+            safe_slug = (brand_name or "brand").lower().replace(" ", "_")
+            st.download_button(
+                "📄 Download Your Detailed PDF Report",
+                data=pdf_bytes,
+                file_name=f"geo_audit_{safe_slug}.pdf",
+                mime="application/pdf",
+                type="primary",
+                key="audit_btn_pdf_paid_global",
+            )
+        except Exception as exc:
+            st.error(f"PDF generation failed: {type(exc).__name__}: {exc}")
+            st.markdown(
+                "Please email us at **hi@geotoolkit.app** with your payment "
+                "confirmation and we'll send the PDF manually."
+            )
+    else:
+        st.markdown("### 📧 We'll email your PDF report shortly")
+        st.markdown(
+            "Your payment was successful. Because you closed the audit tab "
+            "or used incognito mode, we'll email you the detailed PDF report "
+            "within 24 hours.\n\n"
+            "**To get it faster**, please:\n"
+            "1. Click 'Run Another Audit' below\n"
+            "2. Enter the same brand info\n"
+            "3. After audit completes, your PDF will be auto-generated"
+        )
+        st.info(
+            "Or email **hi@geotoolkit.app** with your Stripe payment "
+            "confirmation and we'll send the PDF directly."
+        )
+
+    st.markdown("---")
+    if st.button("Run Another Audit →", type="primary", key="audit_btn_paid_restart"):
+        st.query_params.clear()
+        st.session_state["post_payment_shown_global"] = False
+        st.rerun()
+
+
 # ── Public entry point ───────────────────────────────────────────────────────
 
 def render_audit_page() -> None:
-    """Render the full GEO Audit UI based on current audit_step."""
+    """Render the full GEO Audit UI based on current audit_step.
+
+    Global priority: if the URL has ?paid=true (Stripe success callback),
+    bypass the normal state machine + email gate and show the post-payment
+    page directly. This is needed because Stripe-redirected sessions may
+    lose session_state, leaving us on audit_step="welcome" without the user
+    realizing they paid.
+    """
     _init_audit_state()
+
+    if st.query_params.get("paid") == "true":
+        _render_post_payment()
+        render_footer()
+        return
+
     step = st.session_state.audit_step
     if step == "welcome":
         _render_audit_welcome()

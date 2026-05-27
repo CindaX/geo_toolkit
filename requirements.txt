@@ -16,5 +16,8 @@ openai>=1.30.0             # Chat Completions API for Sonnet 4.5 / Opus 4.7 via 
 # ── Data display ──────────────────────────────────────────────────────
 pandas>=2.0.0              # DataFrames for st.bar_chart / st.dataframe in MVP-B UI
 
+# ── PDF generation ────────────────────────────────────────────────────
+reportlab>=4.0.0           # Pure-Python PDF generation, no system deps
+
 # ── Local dev secrets ─────────────────────────────────────────────────
 python-dotenv>=1.0.0       # .env fallback when not running on Streamlit Cloud

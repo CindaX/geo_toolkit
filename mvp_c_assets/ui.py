@@ -22,6 +22,7 @@ from mvp_c_assets.logic import (
     generate_schema_json,
 )
 from shared._openrouter import get_openrouter_client
+from shared.stripe_links import PAYMENT_LINK_PRO_MONTHLY, PRICE_PRO_MONTHLY_DISPLAY
 from shared.ui_components import render_footer
 
 # ── Asset task registry ───────────────────────────────────────────────────────
@@ -348,6 +349,21 @@ def _render_assets_done() -> None:
     st.markdown("---")
     st.markdown("**Now find out where AI recommends you — and where it doesn't:**")
     _render_prompts_cta()
+
+    st.divider()
+    st.markdown(f"### 🚀 Get monthly updates — {PRICE_PRO_MONTHLY_DISPLAY}")
+    st.markdown(
+        "AI models update every month. Your assets should too.\n"
+        "- Monthly regeneration based on latest AI behavior\n"
+        "- Optimized for ChatGPT, Claude, Perplexity, Gemini\n"
+        "- Email delivery (no need to login)\n"
+        "- All Audit + Prompts features included"
+    )
+    st.link_button(
+        f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
+        PAYMENT_LINK_PRO_MONTHLY,
+        type="primary",
+    )
 
     st.markdown("---")
     if st.button("Start Over", key="assets_btn_restart"):

@@ -15,7 +15,14 @@ import streamlit as st
 from shared._openrouter import get_openrouter_client
 from shared.claude_client import reset_usage_stats
 from shared.email_capture import save_email
+from shared.pdf_generator import audit_result_to_pdf_dict, generate_audit_pdf
 from shared.rate_limit import check_and_record
+from shared.stripe_links import (
+    PAYMENT_LINK_AUDIT_FULL,
+    PAYMENT_LINK_PRO_MONTHLY,
+    PRICE_AUDIT_FULL_DISPLAY,
+    PRICE_PRO_MONTHLY_DISPLAY,
+)
 from shared.ui_components import render_footer
 
 from mvp_a_audit.logic import (
@@ -23,7 +30,6 @@ from mvp_a_audit.logic import (
     _WEIGHTS,
     _build_audit_result,
     _failed_result,
-    generate_recommendations,
     prepare_inputs,
 )
 
@@ -59,7 +65,6 @@ def _init_audit_state() -> None:
         "audit_geo_score":        None,
         "audit_geo_grade":        None,
         "audit_ai_understanding": None,
-        "audit_recommendations":  None,
         "audit_errors":           {},
         "audit_prefill_applied":  False,
     }
@@ -102,26 +107,6 @@ def _prefill_audit_from_shared() -> None:
 
     if applied:
         st.session_state.audit_prefill_applied = True
-
-
-# ── Cross-tool CTA helper ────────────────────────────────────────────────────
-
-def _render_assets_cta() -> None:
-    """Link to the Asset Generator page when multi-page mode is active.
-
-    In standalone mode (`streamlit run mvp_a_audit/app.py`), the pages/
-    directory doesn't exist relative to entry → st.page_link raises and we
-    fall back to a passive hint.
-    """
-    try:
-        st.page_link(
-            "assets",
-            label="→ Generate AI Assets to Fix These Issues",
-            icon="📦",
-        )
-        st.caption("Your brand details will be pre-filled automatically.")
-    except Exception:
-        st.info("📦 To generate AI-ready files, run Asset Generator separately.")
 
 
 # ── Step renderers ───────────────────────────────────────────────────────────
@@ -321,6 +306,46 @@ def _render_audit_free_report() -> None:
     st.session_state.geo_shared_industry = st.session_state.audit_industry
     st.session_state.geo_shared_source_tool = "Audit"
 
+    # Detect Stripe payment-success callback (Stripe success_url ends in ?paid=true).
+    is_paid = (st.query_params.get("paid") == "true")
+
+    # Post-payment block — renders above the normal report so it's the first
+    # thing the user sees when redirected back from Stripe Checkout.
+    if is_paid:
+        if not st.session_state.get("post_payment_celebrated"):
+            st.balloons()
+            st.session_state["post_payment_celebrated"] = True
+        st.success("✅ Payment successful — your detailed PDF report is ready.")
+        if st.session_state.audit_results:
+            try:
+                pdf_dict = audit_result_to_pdf_dict(
+                    audit_results=st.session_state.audit_results,
+                    geo_score=st.session_state.audit_geo_score,
+                    ai_understanding=st.session_state.audit_ai_understanding,
+                )
+                pdf_bytes = generate_audit_pdf(
+                    pdf_dict,
+                    brand_name=st.session_state.audit_brand_name,
+                    url=st.session_state.audit_url,
+                )
+                safe_slug = (st.session_state.audit_brand_name or "brand").lower().replace(" ", "_")
+                st.download_button(
+                    "📄 Download Your Detailed PDF Report",
+                    data=pdf_bytes,
+                    file_name=f"geo_audit_{safe_slug}.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    key="audit_btn_pdf_paid_download",
+                )
+            except Exception as exc:
+                st.error(f"PDF generation failed: {type(exc).__name__}: {exc}")
+        else:
+            st.warning(
+                "We couldn't find your audit result in this session. "
+                "Please re-run the audit; your PDF will regenerate."
+            )
+        st.divider()
+
     score = st.session_state.audit_geo_score
     grade = st.session_state.audit_geo_grade
     results = st.session_state.audit_results
@@ -387,111 +412,40 @@ def _render_audit_free_report() -> None:
                     short_desc = description[:80] + ("…" if len(description) > 80 else "")
                     st.caption(short_desc)
 
-    st.markdown("---")
-    st.markdown("### Ready to Fix These Issues?")
-    st.markdown(
-        "Unlock detailed diagnostics, prioritized fixes with copy-paste code snippets, "
-        "and a 30-day improvement roadmap."
-    )
-    if st.button("🔓 Unlock Detailed Fixes — $19", type="primary", key="audit_btn_unlock"):
-        st.session_state.audit_step = "unlocked"
-        st.rerun()
+    if not is_paid:
+        st.divider()
+        st.markdown("### 🚀 Get more from your GEO Audit")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"#### 🎯 {PRICE_AUDIT_FULL_DISPLAY} one-time")
+            st.markdown(
+                "- Detailed PDF report (downloadable)\n"
+                "- All 8 dimensions deep-dive\n"
+                "- Specific fixes for each gap"
+            )
+            st.link_button(
+                f"🎯 Get Full Report — {PRICE_AUDIT_FULL_DISPLAY}",
+                PAYMENT_LINK_AUDIT_FULL,
+                type="secondary",
+                width="stretch",
+            )
+        with col2:
+            st.markdown(f"#### 🚀 {PRICE_PRO_MONTHLY_DISPLAY}")
+            st.markdown(
+                "- Weekly automated re-audits\n"
+                "- Continuous monitoring + alerts\n"
+                "- All Prompt + Asset features"
+            )
+            st.link_button(
+                f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
+                PAYMENT_LINK_PRO_MONTHLY,
+                type="primary",
+                width="stretch",
+            )
 
     st.markdown("---")
     if st.button("Audit Another Site", key="audit_btn_restart_free"):
-        _reset_audit_state()
-        st.rerun()
-
-
-def _render_audit_unlocked() -> None:
-    # Export to cross-tool shared namespace (idempotent; written each render).
-    st.session_state.geo_shared_brand_name = st.session_state.audit_brand_name
-    st.session_state.geo_shared_url = st.session_state.audit_url
-    st.session_state.geo_shared_industry = st.session_state.audit_industry
-    st.session_state.geo_shared_source_tool = "Audit"
-
-    st.title("GEO Audit — Full Report")
-    st.success("✓ Unlocked — Full diagnostics and fix plan below")
-
-    results = st.session_state.audit_results
-    brand_name = st.session_state.audit_brand_name
-    url = st.session_state.audit_url
-    industry = st.session_state.audit_industry
-
-    if st.session_state.audit_recommendations is None:
-        with st.spinner("Generating personalized fix plan…"):
-            rec = generate_recommendations(results, brand_name, url, industry)
-            st.session_state.audit_recommendations = rec
-
-    rec = st.session_state.audit_recommendations or {}
-    fixes = rec.get("fixes", [])
-    roadmap = rec.get("roadmap", {})
-    summary = rec.get("summary", "")
-
-    if summary:
-        st.markdown(f"**Summary:** {summary}")
-
-    st.markdown("---")
-    st.markdown("### 🎯 Top 5 Priority Fixes")
-    for fix in fixes:
-        rank = fix.get("rank", "?")
-        title = fix.get("title", "Fix")
-        impact = fix.get("impact", "")
-        difficulty = fix.get("difficulty", "")
-        method = fix.get("method", "")
-        snippet = fix.get("code_snippet", "")
-        dim_score = fix.get("current_score")
-        dim = fix.get("dimension", "")
-
-        with st.expander(
-            f"#{rank} — {title} ({_DIM_LABELS.get(dim, dim)}: {dim_score}/100)",
-            expanded=(rank == 1),
-        ):
-            cols = st.columns(2)
-            cols[0].markdown(f"**Impact:** {impact}")
-            cols[1].markdown(f"**Difficulty:** {difficulty}")
-            st.markdown(method)
-            if snippet:
-                st.code(snippet, language="text")
-
-    st.markdown("---")
-    st.markdown("### 🔬 Detailed Dimension Diagnosis")
-    for key, _ in ANALYZERS:
-        result = results.get(key, {})
-        dim_score = result.get("score")
-        details = result.get("details", {})
-        label = _DIM_LABELS.get(key, key)
-
-        with st.expander(
-            f"{label} — {dim_score}/100" if dim_score is not None else f"{label} — failed"
-        ):
-            if dim_score is None:
-                st.error(result.get("description", "Scan failed."))
-            else:
-                st.markdown(result.get("description", ""))
-                if details:
-                    st.json(details)
-
-    if roadmap:
-        st.markdown("---")
-        st.markdown("### 📅 30-Day Improvement Roadmap")
-        for week_key in ["week1", "week2", "week3", "week4"]:
-            actions = roadmap.get(week_key, [])
-            if actions:
-                week_num = week_key.replace("week", "Week ")
-                st.markdown(f"**{week_num}**")
-                for action in actions:
-                    st.markdown(f"- {action}")
-
-    st.markdown("---")
-    st.markdown(
-        "**Next step:** Generate all 6 GEO asset files (llms.txt, brand-facts.md, "
-        "schema.json, FAQ, comparison, product facts) automatically."
-    )
-    _render_assets_cta()
-
-    st.markdown("---")
-    if st.button("Audit Another Site", key="audit_btn_restart_unlocked"):
         _reset_audit_state()
         st.rerun()
 
@@ -510,6 +464,4 @@ def render_audit_page() -> None:
         _render_audit_scanning()
     elif step == "free":
         _render_audit_free_report()
-    elif step == "unlocked":
-        _render_audit_unlocked()
     render_footer()

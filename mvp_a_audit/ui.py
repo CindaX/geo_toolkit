@@ -23,6 +23,10 @@ from shared.stripe_links import (
     PRICE_AUDIT_FULL_DISPLAY,
     PRICE_PRO_MONTHLY_DISPLAY,
 )
+from shared.supabase_client import (
+    get_latest_audit_by_email,
+    save_audit_result,
+)
 from shared.ui_components import render_footer
 
 from mvp_a_audit.logic import (
@@ -299,6 +303,10 @@ def _render_audit_free_report() -> None:
     st.session_state.geo_shared_industry = st.session_state.audit_industry
     st.session_state.geo_shared_source_tool = "Audit"
 
+    # Persist audit to Supabase once per audit-run, so users can recover
+    # their PDF by email after the Stripe redirect (which may drop session).
+    _persist_audit_to_supabase_once()
+
     score = st.session_state.audit_geo_score
     grade = st.session_state.audit_geo_grade
     results = st.session_state.audit_results
@@ -405,6 +413,74 @@ def _render_audit_free_report() -> None:
         st.rerun()
 
 
+# ── Supabase persistence helpers ─────────────────────────────────────────────
+
+def _persist_audit_to_supabase_once() -> None:
+    """Save the current audit to Supabase if we haven't already this session.
+
+    Generates a 16-char audit_id, stores it on session_state so we don't
+    re-insert on every rerun. All writes are graceful — if Supabase is
+    unreachable we silently skip (the user still sees their report).
+    """
+    import uuid
+
+    if st.session_state.get("audit_id"):
+        return  # already saved this audit
+
+    geo_score = st.session_state.audit_geo_score
+    audit_results_raw = st.session_state.audit_results
+    if geo_score is None or not audit_results_raw:
+        return  # incomplete audit — nothing to persist
+
+    audit_id = uuid.uuid4().hex[:16]
+    # Build the PDF-friendly dimensions list so the restore path can feed it
+    # straight into generate_audit_pdf without any reshape.
+    pdf_dict = audit_result_to_pdf_dict(
+        audit_results=audit_results_raw,
+        geo_score=geo_score,
+        ai_understanding=st.session_state.audit_ai_understanding,
+    )
+    ok = save_audit_result(
+        audit_id=audit_id,
+        email=st.session_state.get("geo_shared_email", "") or "",
+        url=st.session_state.audit_url or "",
+        brand_name=st.session_state.audit_brand_name or "",
+        industry=st.session_state.audit_industry or "",
+        overall_score=int(geo_score),
+        ai_understanding=st.session_state.audit_ai_understanding or "",
+        dimensions=pdf_dict.get("dimensions", []),
+    )
+    if ok:
+        st.session_state["audit_id"] = audit_id
+
+
+def _offer_pdf_download(
+    pdf_dict: dict,
+    brand_name: str,
+    url: str,
+    *,
+    key_suffix: str,
+) -> None:
+    """Generate + show a download button for a ready-to-render PDF dict."""
+    try:
+        pdf_bytes = generate_audit_pdf(pdf_dict, brand_name=brand_name, url=url)
+        safe_slug = (brand_name or "brand").lower().replace(" ", "_")
+        st.download_button(
+            "📄 Download Your Detailed PDF Report",
+            data=pdf_bytes,
+            file_name=f"geo_audit_{safe_slug}.pdf",
+            mime="application/pdf",
+            type="primary",
+            key=f"audit_btn_pdf_{key_suffix}",
+        )
+    except Exception as exc:
+        st.error(f"PDF generation failed: {type(exc).__name__}: {exc}")
+        st.markdown(
+            "Please email **hi@geotoolkit.app** with your payment confirmation "
+            "and we'll send the PDF manually."
+        )
+
+
 # ── Stripe payment-success bypass ────────────────────────────────────────────
 
 def _render_post_payment() -> None:
@@ -423,10 +499,41 @@ def _render_post_payment() -> None:
     st.success("✅ Payment successful! Thank you for your purchase.")
     st.markdown("---")
 
+    # 🐛 TEMPORARY DEBUG — verifies whether session_state survives the Stripe
+    # redirect on Streamlit Cloud. Remove after we confirm the root cause.
+    with st.expander("🐛 Debug info (temporary)", expanded=True):
+        st.write("**session_state contents:**")
+        keys = list(st.session_state.keys())
+        st.write(f"Total keys: {len(keys)}")
+        st.write(f"Keys: {keys}")
+
+        audit_results_dbg = st.session_state.get("audit_results")
+        st.write(f"audit_results is None: {audit_results_dbg is None}")
+        st.write(f"audit_results type: {type(audit_results_dbg).__name__}")
+        if audit_results_dbg:
+            if isinstance(audit_results_dbg, dict):
+                st.write(f"audit_results dict keys: {list(audit_results_dbg.keys())[:10]}")
+            else:
+                st.write(f"audit_results value preview: {str(audit_results_dbg)[:200]}")
+
+        # Probe both un-prefixed (user spec) and audit_-prefixed (actual) names,
+        # so we can spot a naming mismatch as well as a session-loss case.
+        for key in [
+            "brand_name", "url", "industry",
+            "audit_brand_name", "audit_url", "audit_industry", "audit_step",
+            "geo_shared_brand_name", "geo_shared_url", "geo_shared_industry",
+            "geo_shared_email", "geo_shared_email_captured",
+        ]:
+            val = st.session_state.get(key, "<missing>")
+            st.write(f"`{key}`: {val}")
+
+        st.write(f"**Query params:** {dict(st.query_params)}")
+
     audit_results = st.session_state.get("audit_results") or {}
     brand_name = st.session_state.get("audit_brand_name", "") or ""
     url = st.session_state.get("audit_url", "") or ""
 
+    # ── Path 1: session alive — use it directly ─────────────────────────
     if audit_results and brand_name:
         st.markdown("### 📄 Your detailed PDF report is ready")
         try:
@@ -435,42 +542,62 @@ def _render_post_payment() -> None:
                 geo_score=st.session_state.get("audit_geo_score"),
                 ai_understanding=st.session_state.get("audit_ai_understanding"),
             )
-            pdf_bytes = generate_audit_pdf(pdf_dict, brand_name=brand_name, url=url)
-            safe_slug = (brand_name or "brand").lower().replace(" ", "_")
-            st.download_button(
-                "📄 Download Your Detailed PDF Report",
-                data=pdf_bytes,
-                file_name=f"geo_audit_{safe_slug}.pdf",
-                mime="application/pdf",
-                type="primary",
-                key="audit_btn_pdf_paid_global",
-            )
+            _offer_pdf_download(pdf_dict, brand_name, url, key_suffix="paid_session")
         except Exception as exc:
             st.error(f"PDF generation failed: {type(exc).__name__}: {exc}")
-            st.markdown(
-                "Please email us at **hi@geotoolkit.app** with your payment "
-                "confirmation and we'll send the PDF manually."
-            )
     else:
-        st.markdown("### 📧 We'll email your PDF report shortly")
-        st.markdown(
-            "Your payment was successful. Because you closed the audit tab "
-            "or used incognito mode, we'll email you the detailed PDF report "
-            "within 24 hours.\n\n"
-            "**To get it faster**, please:\n"
-            "1. Click 'Run Another Audit' below\n"
-            "2. Enter the same brand info\n"
-            "3. After audit completes, your PDF will be auto-generated"
-        )
-        st.info(
-            "Or email **hi@geotoolkit.app** with your Stripe payment "
-            "confirmation and we'll send the PDF directly."
-        )
+        # ── Path 2: session lost — recover from Supabase by email ────────
+        recovered = st.session_state.get("pdf_recovered_audit")
+        if recovered:
+            st.markdown("### 📄 Your detailed PDF report is ready")
+            st.caption(f"Recovered audit for {recovered.get('brand_name', '')} ({recovered.get('email', '')})")
+            pdf_dict = {
+                "overall_score":    recovered.get("overall_score", 0),
+                "ai_understanding": recovered.get("ai_understanding", ""),
+                "dimensions":       recovered.get("dimensions") or [],
+            }
+            _offer_pdf_download(
+                pdf_dict,
+                recovered.get("brand_name", "") or "",
+                recovered.get("url", "") or "",
+                key_suffix="paid_recovered",
+            )
+        else:
+            st.markdown("### 📄 Retrieve your detailed PDF report")
+            st.markdown(
+                "Your audit session was lost (most commonly because you closed "
+                "the audit tab or used incognito mode). Enter the email you used "
+                "during the audit below — we'll fetch your audit and generate "
+                "the PDF on demand."
+            )
+            recovery_email = st.text_input(
+                "Email used during audit",
+                key="pdf_recovery_email",
+                placeholder="you@example.com",
+            )
+            if st.button("Get My PDF Report", type="primary", key="audit_btn_pdf_recover"):
+                if not recovery_email or "@" not in recovery_email or "." not in recovery_email:
+                    st.error("Please enter a valid email.")
+                else:
+                    row = get_latest_audit_by_email(recovery_email.strip())
+                    if row is None:
+                        st.warning(
+                            "We couldn't find an audit for that email. Make sure "
+                            "it matches the one you used to run the audit, or "
+                            "email **hi@geotoolkit.app** with your Stripe "
+                            "payment confirmation and we'll send the PDF manually."
+                        )
+                    else:
+                        st.session_state["pdf_recovered_audit"] = row
+                        st.rerun()
 
     st.markdown("---")
-    if st.button("Run Another Audit →", type="primary", key="audit_btn_paid_restart"):
+    if st.button("Run Another Audit →", key="audit_btn_paid_restart"):
         st.query_params.clear()
         st.session_state["post_payment_shown_global"] = False
+        # Clear any recovered audit so a fresh restart doesn't leak stale data.
+        if "pdf_recovered_audit" in st.session_state:
+            del st.session_state["pdf_recovered_audit"]
         st.rerun()
 
 

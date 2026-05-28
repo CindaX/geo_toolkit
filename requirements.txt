@@ -19,5 +19,8 @@ pandas>=2.0.0              # DataFrames for st.bar_chart / st.dataframe in MVP-B
 # ── PDF generation ────────────────────────────────────────────────────
 reportlab>=4.0.0           # Pure-Python PDF generation, no system deps
 
+# ── Persistence (emails + audit results, survives Streamlit restarts) ──
+supabase>=2.0.0            # Supabase Python client — graceful no-op if SUPABASE_URL/KEY missing
+
 # ── Local dev secrets ─────────────────────────────────────────────────
 python-dotenv>=1.0.0       # .env fallback when not running on Streamlit Cloud

@@ -1,4 +1,4 @@
-You are a GEO (Generative Engine Optimization) consultant generating a prioritized fix plan for a website.
+You are a GEO (Generative Engine Optimization) consultant generating per-dimension fix recommendations for a website.
 
 Brand: {brand_name}
 URL: {url}
@@ -7,23 +7,30 @@ Industry: {industry}
 GEO Audit Results (JSON):
 {audit_results_json}
 
-Generate the top 5 highest-impact fixes, prioritized by: (score_gap * weight) descending — meaning fix the dimensions where the gap from 100 is largest AND the weight is highest.
+Generate exactly 5 fixes — ONE per dimension — for these 5 dimensions, in this exact order:
+1. brand_clarity
+2. content_citability
+3. eeat_signals
+4. competitive
+5. factual_density
+
+(The other 3 dimensions — crawler_access, llms_txt, schema_markup — are handled by deterministic templates elsewhere; do NOT include them.)
 
 For each fix:
-- "rank": integer 1-5
+- "rank": integer 1-5 (matches the dimension order above)
 - "dimension": the dimension key (e.g. "content_citability")
 - "title": fix title, max 8 words
 - "current_score": the dimension's current score (from audit results)
 - "impact": "High" / "Medium" / "Low" based on dimension weight
-- "difficulty": "Easy" (1-2 hours) / "Medium" (1-2 days) / "Hard" (1+ week)
+- "difficulty": "Easy (1-2 hours)" / "Medium (1-2 days)" / "Hard (1+ week)"
 - "method": 2-3 sentences describing exactly what to do, with no vague advice. Name specific files to edit, specific sections to add, or specific tools to use.
-- "code_snippet": a ready-to-use code or text snippet implementing the fix. For robots.txt fixes: actual robots.txt lines. For schema fixes: actual JSON-LD. For llms.txt: actual section text. For content fixes: a rewritten example paragraph. Use empty string "" if not applicable.
+- "code_snippet": a ready-to-use code or text snippet implementing the fix. For content fixes (brand_clarity, citability, factual_density): a rewritten example paragraph showing what good looks like. For E-E-A-T: an example author bio block or trust-signal HTML. For competitive: an example comparison-page outline. Use empty string "" only if truly nothing pasteable applies.
 
 Also generate:
 - "roadmap": object with keys "week1", "week2", "week3", "week4" — each an array of 2-3 action strings for that week, ordered easy-to-hard
 
 Return a JSON object with exactly these fields:
-- "fixes": array of 5 fix objects as described above
+- "fixes": array of exactly 5 fix objects, one per dimension in the order above
 - "roadmap": object as described above
 - "summary": one sentence describing the overall GEO situation and biggest opportunity
 

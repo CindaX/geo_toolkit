@@ -117,6 +117,9 @@ def run_audit(url: str, brand_name: str, industry: str) -> dict:
                 results[key] = _failed_result(key, traceback.format_exc())
             _warn_if_over_budget()
 
+    # Merge per-dimension fixes (static templates + 1 LLM call for 5 dims).
+    _merge_fixes_into_results(results, brand_name, url, industry)
+
     return _build_audit_result(url, brand_name, industry, results)
 
 
@@ -153,8 +156,21 @@ def generate_recommendations(
     brand_name: str,
     url: str,
     industry: str,
-) -> dict:
-    """Generate top-5 prioritized fix recommendations (paid-tier feature)."""
+) -> dict[str, dict]:
+    """Generate one fix per LLM-handled dimension (brand_clarity / content_citability /
+    eeat_signals / competitive / factual_density).
+
+    Returns a ``{dimension_key: fix_dict}`` map for direct merging into
+    ``run_audit``'s results. The fix_dict is normalized to the unified fix
+    schema (see :mod:`shared.fix_templates`): keys ``title``, ``why_matters``,
+    ``how_to_fix``, ``code_snippet``, ``difficulty``, ``impact``. The 3
+    deterministic dimensions are handled by static templates and are NOT
+    included here.
+
+    Never raises — returns ``{}`` if the LLM call fails or returns bad JSON.
+    """
+    from shared.fix_templates import WHY_MATTERS
+
     results_summary = {
         key: {
             "score": r.get("score"),
@@ -175,7 +191,72 @@ def generate_recommendations(
 
     data = ask_claude_json(prompt)
     _warn_if_over_budget()
-    return data
+    if not isinstance(data, dict) or data.get("error") or not data.get("fixes"):
+        return {}
+
+    out: dict[str, dict] = {}
+    for fix in data.get("fixes", []) or []:
+        dim = fix.get("dimension")
+        if not dim:
+            continue
+        # Normalize to the unified schema used by both static + LLM fixes so
+        # the PDF renderer can treat them identically.
+        out[dim] = {
+            "title":        str(fix.get("title", "")).strip(),
+            "why_matters":  WHY_MATTERS.get(dim, ""),
+            "how_to_fix":   str(fix.get("method", "")).strip(),
+            "code_snippet": str(fix.get("code_snippet", "") or "").strip(),
+            "difficulty":   str(fix.get("difficulty", "")).strip(),
+            "impact":       str(fix.get("impact", "")).strip(),
+        }
+    return out
+
+
+def _merge_fixes_into_results(
+    results: dict[str, dict],
+    brand_name: str,
+    url: str,
+    industry: str,
+) -> None:
+    """Mutate ``results`` in place to add a ``fix`` field to each dimension.
+
+    - Static templates (3 deterministic dimensions) — instant, no LLM cost.
+    - LLM recommendations (5 dimensions) — one Claude call covers all 5.
+    - Failed analyzers (score is None / error set) — ``fix`` stays ``None``.
+
+    All paths are graceful: if Claude is unreachable, static-template
+    dimensions still get fixes and the LLM ones get ``None``. The PDF
+    renderer treats ``None`` as "skip the fix sections for this dimension".
+    """
+    print(f"[FIX_MERGE_DEBUG] called with {len(results)} dims, brand={brand_name}, url={url}", flush=True)
+    from shared.fix_templates import generate_static_fix
+
+    # Phase 1: static fixes (instant, deterministic)
+    for dim_key, result in results.items():
+        if result.get("error") or result.get("score") is None:
+            result["fix"] = None
+            continue
+        static_fix = generate_static_fix(
+            dim_key,
+            result.get("details", {}) or {},
+            brand_name,
+            url,
+        )
+        result["fix"] = static_fix  # may be None if dim_key is LLM-handled
+
+    # Phase 2: LLM fixes for the 5 dimensions that don't have a static template
+    try:
+        llm_fixes = generate_recommendations(results, brand_name, url, industry)
+    except Exception as exc:
+        logger.warning("Per-dimension LLM fixes failed: %s", exc)
+        llm_fixes = {}
+
+    for dim_key, fix in llm_fixes.items():
+        if dim_key in results and results[dim_key].get("fix") is None and not results[dim_key].get("error"):
+            results[dim_key]["fix"] = fix
+
+    fix_count = sum(1 for r in results.values() if r.get("fix") is not None)
+    print(f"[FIX_MERGE_DEBUG] done, {fix_count}/{len(results)} dims have fix", flush=True)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

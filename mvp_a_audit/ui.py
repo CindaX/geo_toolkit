@@ -34,6 +34,7 @@ from mvp_a_audit.logic import (
     _WEIGHTS,
     _build_audit_result,
     _failed_result,
+    _merge_fixes_into_results,
     prepare_inputs,
 )
 
@@ -284,6 +285,11 @@ def _render_audit_scanning() -> None:
                     _log.write(debug_line)
                 audit_results[key] = _failed_result(key, tb)
                 errors[key] = tb
+
+    # Generate per-dimension fixes (static templates + 1 LLM call for 5 dims).
+    # Adds ~30-60s; surface it so the user knows we're still working.
+    status_text.markdown("✨ **Generating personalized fix recommendations…**")
+    _merge_fixes_into_results(audit_results, brand_name, url, industry)
 
     final = _build_audit_result(url, brand_name, industry, audit_results)
     st.session_state.audit_results = final["results"]

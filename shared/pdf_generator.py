@@ -22,7 +22,6 @@ English only — Helvetica (built-in, no font files needed → Cloud-safe).
 from __future__ import annotations
 
 from datetime import datetime
-from html import escape as _html_escape
 from io import BytesIO
 
 from reportlab.lib.colors import HexColor
@@ -258,9 +257,13 @@ def _build_code_block(code: str, styles: dict):
     split correctly across pages). Trade-off: no background fill / no
     border. The blue ``LINEBEFORE`` section heading above this block + the
     Courier font are still strong enough visual cues to read as "code".
+
+    Note: do NOT html-escape the input. reportlab's Preformatted treats raw
+    ``<`` / ``>`` as literal characters (verified by extracting rendered
+    text with pypdf). Pre-escaping produces double-escape output where
+    users see ``&lt;script&gt;`` literally in the PDF. Pass raw code as-is.
     """
-    escaped = _html_escape(code.rstrip(), quote=False)
-    return Preformatted(escaped, styles["code"])
+    return Preformatted(code.rstrip(), styles["code"])
 
 
 def _build_difficulty_label(difficulty: str, styles: dict) -> Paragraph:

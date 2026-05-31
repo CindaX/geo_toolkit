@@ -120,14 +120,6 @@ def audit_result_to_pdf_dict(
     `audit_results` is the dict-of-dicts produced by run_audit (keys =
     dimension internal names; values = {score, description, weight, ...}).
     """
-    fix_count = sum(
-        1 for k, v in (audit_results or {}).items()
-        if isinstance(v, dict) and v.get("fix")
-    )
-    print(
-        f"[PDF_GEN_DEBUG] generating PDF with {fix_count}/{len(audit_results or {})} dims having fix",
-        flush=True,
-    )
     dimensions: list[dict] = []
     for key, result in (audit_results or {}).items():
         score = result.get("score")

@@ -228,7 +228,6 @@ def _merge_fixes_into_results(
     dimensions still get fixes and the LLM ones get ``None``. The PDF
     renderer treats ``None`` as "skip the fix sections for this dimension".
     """
-    print(f"[FIX_MERGE_DEBUG] called with {len(results)} dims, brand={brand_name}, url={url}", flush=True)
     from shared.fix_templates import generate_static_fix
 
     # Phase 1: static fixes (instant, deterministic)
@@ -254,9 +253,6 @@ def _merge_fixes_into_results(
     for dim_key, fix in llm_fixes.items():
         if dim_key in results and results[dim_key].get("fix") is None and not results[dim_key].get("error"):
             results[dim_key]["fix"] = fix
-
-    fix_count = sum(1 for r in results.values() if r.get("fix") is not None)
-    print(f"[FIX_MERGE_DEBUG] done, {fix_count}/{len(results)} dims have fix", flush=True)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

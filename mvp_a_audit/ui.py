@@ -23,6 +23,7 @@ from shared.stripe_links import (
     PRICE_AUDIT_FULL_DISPLAY,
     PRICE_PRO_MONTHLY_DISPLAY,
 )
+from shared.payment_verify import verify_unlock
 from shared.supabase_client import (
     get_latest_audit_by_email,
     save_audit_result,
@@ -490,7 +491,8 @@ def _offer_pdf_download(
 # ── Stripe payment-success bypass ────────────────────────────────────────────
 
 def _render_post_payment() -> None:
-    """Stripe payment-success page — shown when URL has ?paid=true.
+    """Stripe payment-success page — shown after ``_process_payment_callback``
+    has verified the Stripe session and set ``st.session_state["unlocked_tier"]``.
 
     Two modes:
       - Session alive (audit_results in state): generate + offer PDF download.
@@ -499,10 +501,17 @@ def _render_post_payment() -> None:
 
     Bypasses the email gate and rate limit on purpose — the user already paid.
     """
+    tier = st.session_state.get("unlocked_tier", "single")
     if not st.session_state.get("post_payment_shown_global"):
         st.balloons()
         st.session_state["post_payment_shown_global"] = True
-    st.success("✅ Payment successful! Thank you for your purchase.")
+    if tier == "full":
+        st.success(
+            "✅ Payment successful — **GEO Toolkit Pro** unlocked. "
+            "You now have access to detailed audit fixes, the Prompt Engine, and the Asset Generator."
+        )
+    else:
+        st.success("✅ Payment successful — your detailed audit PDF is ready below.")
     st.markdown("---")
 
     # 🐛 TEMPORARY DEBUG — verifies whether session_state survives the Stripe
@@ -601,26 +610,61 @@ def _render_post_payment() -> None:
     if st.button("Run Another Audit →", key="audit_btn_paid_restart"):
         st.query_params.clear()
         st.session_state["post_payment_shown_global"] = False
-        # Clear any recovered audit so a fresh restart doesn't leak stale data.
-        if "pdf_recovered_audit" in st.session_state:
-            del st.session_state["pdf_recovered_audit"]
+        # Drop the unlock so the user sees the normal flow again on the next
+        # run. The Stripe-verified result for this session_id stays in
+        # `verified_sessions` cache so re-pasting the same URL re-unlocks
+        # without re-charging.
+        for k in ("unlocked_tier", "unlocked_session_id", "unlocked_email", "pdf_recovered_audit"):
+            if k in st.session_state:
+                del st.session_state[k]
         st.rerun()
 
 
 # ── Public entry point ───────────────────────────────────────────────────────
 
+def _process_payment_callback() -> None:
+    """Verify any Stripe ``?session_id=...`` redirect and grant the unlock tier.
+
+    Replaces the old naked ``?paid=true`` bypass which any visitor could spoof.
+    Reads ``session_id`` from the URL, calls Stripe to retrieve the canonical
+    Checkout Session, and only sets ``st.session_state["unlocked_tier"]`` if
+    Stripe confirms ``payment_status == "paid"`` AND the amount matches a
+    known SKU (see ``shared.payment_verify._TIER_BY_AMOUNT``).
+
+    No-ops (and silently does nothing) when:
+      - No ``session_id`` query parameter is present
+      - This particular ``session_id`` already verified earlier (cache hit)
+      - ``STRIPE_SECRET_KEY`` is not configured
+      - The session is unpaid, malformed, or for an unrecognized amount
+    """
+    if st.session_state.get("unlocked_tier"):
+        return  # already unlocked in this Streamlit session
+
+    session_id = st.query_params.get("session_id")
+    if not session_id:
+        return
+
+    result = verify_unlock(session_id)
+    if result is None:
+        return
+
+    st.session_state["unlocked_tier"] = result["tier"]
+    st.session_state["unlocked_session_id"] = result["session_id"]
+    st.session_state["unlocked_email"] = result.get("email") or ""
+
+
 def render_audit_page() -> None:
     """Render the full GEO Audit UI based on current audit_step.
 
-    Global priority: if the URL has ?paid=true (Stripe success callback),
-    bypass the normal state machine + email gate and show the post-payment
-    page directly. This is needed because Stripe-redirected sessions may
-    lose session_state, leaving us on audit_step="welcome" without the user
-    realizing they paid.
+    Global priority: if Stripe has redirected with a ``session_id`` AND the
+    Stripe API confirms the session is paid, mark the unlock tier and show
+    the post-payment view. The naked ``?paid=true`` query — which any visitor
+    could spoof to bypass payment — has been removed.
     """
     _init_audit_state()
+    _process_payment_callback()
 
-    if st.query_params.get("paid") == "true":
+    if st.session_state.get("unlocked_tier"):
         _render_post_payment()
         render_footer()
         return

@@ -13,7 +13,11 @@ import streamlit as st
 
 from shared._openrouter import get_openrouter_client
 from shared.claude_client import get_usage_stats, reset_usage_stats
-from shared.stripe_links import PAYMENT_LINK_PRO_MONTHLY, PRICE_PRO_MONTHLY_DISPLAY
+from shared.stripe_links import (
+    PAYMENT_LINK_PRO_MONTHLY,
+    PRICE_PRO_MONTHLY_DISPLAY,
+    PRO_MONTHLY_ENABLED,
+)
 from shared.ui_components import render_footer
 
 from mvp_b_prompt.logic import (
@@ -418,20 +422,23 @@ def _render_prompts_free_report() -> None:
     st.markdown("**Want to know *why* AI ranks you this way?**")
     _render_audit_cta()
 
-    st.divider()
-    st.markdown(f"### 🚀 Unlock unlimited prompts — {PRICE_PRO_MONTHLY_DISPLAY}")
-    st.markdown(
-        "Continuous monitoring of your brand's AI visibility:\n"
-        "- See all 20 top prompts (not just 5)\n"
-        "- Track 10 competitors (not 4)\n"
-        "- Weekly SOV change alerts\n"
-        "- Monthly trending prompts report"
-    )
-    st.link_button(
-        f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
-        PAYMENT_LINK_PRO_MONTHLY,
-        type="primary",
-    )
+    # Pro monthly subscription — hidden behind a master switch until the
+    # subscription pipeline is wired up.
+    if PRO_MONTHLY_ENABLED:
+        st.divider()
+        st.markdown(f"### 🚀 Unlock unlimited prompts — {PRICE_PRO_MONTHLY_DISPLAY}")
+        st.markdown(
+            "Continuous monitoring of your brand's AI visibility:\n"
+            "- See all 20 top prompts (not just 5)\n"
+            "- Track 10 competitors (not 4)\n"
+            "- Weekly SOV change alerts\n"
+            "- Monthly trending prompts report"
+        )
+        st.link_button(
+            f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
+            PAYMENT_LINK_PRO_MONTHLY,
+            type="primary",
+        )
 
     st.markdown("---")
     if st.button("Analyze Another Brand", key="prompts_btn_restart_free"):

@@ -4,17 +4,27 @@ These are Stripe-hosted checkout pages — clicking them opens Stripe's secure
 payment form (with a back link to our app). No code needed on our side
 beyond a link button.
 
-Currently in TEST mode (use card 4242 4242 4242 4242 to test).
-Switch to live URLs when ready to accept real payments.
+Status:
+  - AUDIT_FULL ($9.90 one-time): LIVE — accepts real payments.
+  - PRO_MONTHLY ($29.90/month):  still on a TEST link, AND its CTA is
+    hidden across the UI via ``PRO_MONTHLY_ENABLED = False`` until the
+    subscription handling (renewals, cancellations, tier-gated content) is
+    properly wired up.
 """
 
 from __future__ import annotations
 
-# One-time purchase: $9.90 for detailed PDF report + benchmark
-PAYMENT_LINK_AUDIT_FULL = "https://buy.stripe.com/test_5kQ3cugXM19obbN9M448000"
+# One-time purchase: $9.90 for detailed PDF report + benchmark — LIVE.
+PAYMENT_LINK_AUDIT_FULL = "https://buy.stripe.com/dRm3cu8rg8BQa7J5vO48002"
 
-# Subscription: $29.90/month for continuous monitoring
+# Subscription: $29.90/month for continuous monitoring — TEST link, gated off.
 PAYMENT_LINK_PRO_MONTHLY = "https://buy.stripe.com/test_9B6aEWfTIaJYdjV9M448001"
+
+# Master switch for the monthly subscription CTA. While False, every Pro
+# subscription button across the 3 tools is hidden. Flip to True once
+# subscription-related plumbing (verify_unlock tier="full" content gating,
+# cancellation handling, dunning) is ready.
+PRO_MONTHLY_ENABLED = False
 
 # Pricing display strings (for UI consistency)
 PRICE_AUDIT_FULL_DISPLAY = "$9.90"

@@ -22,6 +22,7 @@ from shared.stripe_links import (
     PAYMENT_LINK_PRO_MONTHLY,
     PRICE_AUDIT_FULL_DISPLAY,
     PRICE_PRO_MONTHLY_DISPLAY,
+    PRO_MONTHLY_ENABLED,
 )
 from shared.payment_verify import verify_unlock
 from shared.supabase_client import (
@@ -401,18 +402,21 @@ def _render_audit_free_report() -> None:
             width="stretch",
         )
     with col2:
-        st.markdown(f"#### 🚀 {PRICE_PRO_MONTHLY_DISPLAY}")
-        st.markdown(
-            "- Weekly automated re-audits\n"
-            "- Continuous monitoring + alerts\n"
-            "- All Prompt + Asset features"
-        )
-        st.link_button(
-            f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
-            PAYMENT_LINK_PRO_MONTHLY,
-            type="primary",
-            width="stretch",
-        )
+        # Pro monthly subscription — hidden behind a master switch until the
+        # subscription pipeline (renewals, tier gating) is wired up.
+        if PRO_MONTHLY_ENABLED:
+            st.markdown(f"#### 🚀 {PRICE_PRO_MONTHLY_DISPLAY}")
+            st.markdown(
+                "- Weekly automated re-audits\n"
+                "- Continuous monitoring + alerts\n"
+                "- All Prompt + Asset features"
+            )
+            st.link_button(
+                f"🚀 Subscribe to Pro — {PRICE_PRO_MONTHLY_DISPLAY}",
+                PAYMENT_LINK_PRO_MONTHLY,
+                type="primary",
+                width="stretch",
+            )
 
     st.markdown("---")
     if st.button("Audit Another Site", key="audit_btn_restart_free"):

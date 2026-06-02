@@ -15,6 +15,7 @@ import re
 import time
 from typing import Any
 
+import httpx
 import openai
 from openai import OpenAI
 
@@ -57,6 +58,10 @@ _MODEL_ALIASES: dict[str, str] = {
 
 _MAX_RETRIES: int = 3
 _BACKOFF_BASE_SECONDS: float = 1.0
+_REQUEST_TIMEOUT_SECONDS: float = 60.0   # per-call timeout; without this the
+                                          # SDK has no upper bound and a slow
+                                          # OpenRouter response will hang the
+                                          # whole audit forever.
 
 
 # --- Internal ------------------------------------------------------------
@@ -74,6 +79,15 @@ def _resolve_model(model: str | None) -> str:
 
 
 def _is_retryable(exc: BaseException) -> bool:
+    # Timeout = retry. With _REQUEST_TIMEOUT_SECONDS enforced on every call,
+    # a slow OpenRouter response surfaces as openai.APITimeoutError (the SDK
+    # wraps the underlying httpx.TimeoutException). Bound retries by
+    # _MAX_RETRIES so a persistently-slow upstream still terminates rather
+    # than hanging the audit.
+    if isinstance(exc, openai.APITimeoutError):
+        return True
+    if isinstance(exc, httpx.TimeoutException):
+        return True
     if isinstance(exc, (openai.APIConnectionError, openai.RateLimitError)):
         return True
     if isinstance(exc, openai.APIStatusError):
@@ -97,19 +111,29 @@ def _call_with_retry(
     system: str | None,
     model: str | None,
     max_tokens: int,
+    response_format: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, int]]:
-    """Call ``chat.completions.create`` with retry. Returns (text, usage_delta)."""
+    """Call ``chat.completions.create`` with retry. Returns (text, usage_delta).
+
+    ``response_format`` is forwarded as-is — pass ``{"type": "json_object"}``
+    to enable structured-output JSON mode (model is then constrained to emit
+    a well-formed JSON object — no markdown fences, no stray prose).
+    """
     client = _client_or_default()
     resolved = _resolve_model(model)
     last_exc: BaseException | None = None
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            resp = client.chat.completions.create(
-                model=resolved,
-                max_tokens=max_tokens,
-                messages=_build_messages(prompt, system),
-            )
+            kwargs: dict[str, Any] = {
+                "model":       resolved,
+                "max_tokens":  max_tokens,
+                "messages":    _build_messages(prompt, system),
+                "timeout":     _REQUEST_TIMEOUT_SECONDS,
+            }
+            if response_format is not None:
+                kwargs["response_format"] = response_format
+            resp = client.chat.completions.create(**kwargs)
         except Exception as exc:  # noqa: BLE001 — re-raised after classification
             last_exc = exc
             if not _is_retryable(exc) or attempt == _MAX_RETRIES:
@@ -235,9 +259,17 @@ def ask_claude_json(
     )
     full_system = f"{system}\n\n{json_directive}" if system else json_directive
 
+    # OpenRouter / OpenAI structured-output JSON mode — model is constrained
+    # to emit a well-formed JSON object. This is the real fix for "Claude
+    # occasionally wraps in markdown fences" and "long Chinese strings get
+    # unescaped quotes / raw newlines" symptoms. The system message still
+    # has the "respond with JSON" instruction so the model knows the shape.
+    _json_response_format = {"type": "json_object"}
+
     try:
         text, usage = _call_with_retry(
-            prompt=prompt, system=full_system, model=model, max_tokens=max_tokens
+            prompt=prompt, system=full_system, model=model, max_tokens=max_tokens,
+            response_format=_json_response_format,
         )
         _record_usage(usage)
     except ClaudeError as exc:
@@ -256,7 +288,8 @@ def ask_claude_json(
     )
     try:
         text, usage = _call_with_retry(
-            prompt=retry_prompt, system=full_system, model=model, max_tokens=max_tokens
+            prompt=retry_prompt, system=full_system, model=model, max_tokens=max_tokens,
+            response_format=_json_response_format,
         )
         _record_usage(usage)
     except ClaudeError as exc:

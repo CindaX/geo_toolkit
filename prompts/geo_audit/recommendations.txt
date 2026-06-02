@@ -44,4 +44,10 @@ Return a JSON object with exactly these fields:
 - "roadmap": object as described above
 - "summary": one sentence describing the overall GEO situation and biggest opportunity
 
-CRITICAL: Output PURE JSON ONLY. Do not wrap in markdown code blocks (no ```json or ``` markers). The first character must be { and the last character must be }. Any other content will break JSON parsers.
+CRITICAL JSON safety rules (string-value content):
+- Output PURE JSON ONLY. No markdown code blocks (no ```json or ``` markers). The first character must be { and the last must be }.
+- **NEVER use raw ASCII double quotes (") inside any string value** — they prematurely terminate the JSON string and break parsing. This is the #1 cause of malformed output.
+- When you need to quote a word, phrase, button label, or section name inline (especially inside Chinese ``where_to_apply``): use **Chinese corner brackets 「...」** (preferred) or curly quotes "..." / '...' . Never use ASCII " or ' as inline quote marks.
+- Example — WRONG (breaks JSON):  "标题写 "团队介绍" 或 "专家团队""
+- Example — RIGHT (parses fine):   "标题写「团队介绍」或「专家团队」"
+- Inside ``code_snippet`` literal characters like " are fine because they sit between the outer JSON quotes that delimit the snippet field — but you MUST escape each one as \" to keep the JSON valid.

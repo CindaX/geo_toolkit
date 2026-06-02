@@ -189,7 +189,11 @@ def generate_recommendations(
         .replace("{audit_results_json}", json.dumps(results_summary, ensure_ascii=False, indent=2))
     )
 
-    data = ask_claude_json(prompt)
+    # max_tokens larger than the 4096 default: this prompt asks for 5 fixes
+    # × (method + code_snippet + where_to_apply) + a 4-week roadmap. With the
+    # default it occasionally truncates → unparseable JSON → re-ask doubles
+    # the wall time. 8000 covers worst-case Chinese where_to_apply output.
+    data = ask_claude_json(prompt, max_tokens=8000)
     _warn_if_over_budget()
     if not isinstance(data, dict) or data.get("error") or not data.get("fixes"):
         return {}

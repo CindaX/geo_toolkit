@@ -13,13 +13,23 @@ Unified fix schema (same shape from static + LLM paths so the PDF
 renderer can treat them identically):
 
     {
-        "title":        str,    # ≤ 8 words
-        "why_matters":  str,    # 1 sentence
-        "how_to_fix":   str,    # 2-3 sentences
-        "code_snippet": str,    # ready-to-paste, may be ""
-        "difficulty":   str,    # "Easy (X)" / "Medium (X)" / "Hard (X)"
-        "impact":       str,    # "High" / "Medium" / "Low"
+        "title":           str,    # ≤ 8 words
+        "why_matters":     str,    # 1 sentence
+        "how_to_fix":      str,    # 2-3 sentences
+        "code_snippet":    str,    # ready-to-paste, may be ""
+        "difficulty":      str,    # "Easy (X)" / "Medium (X)" / "Hard (X)"
+        "impact":          str,    # "High" / "Medium" / "Low"
+        "where_to_apply":  str,    # Markdown: Shopify path + generic fallback + verify step
     }
+
+``where_to_apply`` always contains three labelled Markdown sections:
+    **Shopify:** concrete admin path + click-by-click steps
+    **其他平台 (通用):** one-line generic placement (give to dev / common UI)
+    **验证:** how to confirm the change took effect
+
+Audience is primarily Shopify e-commerce operators, not developers — the
+text should avoid raw dev jargon ("<head>", "web root", "模板文件" alone)
+unless paired with a click-trail or hand-off instruction.
 """
 
 from __future__ import annotations
@@ -79,15 +89,25 @@ def generate_fix_crawler_access(details: dict, brand_name: str, url: str) -> dic
     not_mentioned = list(details.get("not_mentioned", []) or [])
 
     targets = disallowed + not_mentioned
+    crawler_where_to_apply = (
+        "**Shopify:** 注意：Shopify 不能直接编辑 robots.txt，需创建模板：后台 → 在线商店 → 主题 → 编辑代码 → "
+        "Templates 文件夹 → Add a new template → 类型选 robots.txt → 创建，然后加入下面的规则。"
+        "重要提醒：Shopify 默认规则已对 SEO 优化，只新增 AI 爬虫规则、不要删默认规则，改错可能导致流量大幅下降。"
+        "不确定就把这段交给 Shopify 开发者。\n"
+        "**其他平台 (通用):** 直接编辑网站根目录的 robots.txt 文件 (位于 yourstore.com/robots.txt)。\n"
+        "**验证:** 部署后浏览器访问 你的域名/robots.txt，确认新规则在里面。"
+    )
+
     if not targets:
         # All 4 bots explicitly allowed — nothing to fix
         return {
-            "title":        "Maintain explicit crawler access",
-            "why_matters":  WHY_MATTERS["crawler_access"],
-            "how_to_fix":   "Your robots.txt already allows all major AI crawlers. Keep monitoring as new bots launch — add explicit Allow rules for each new agent rather than relying on default permission.",
-            "code_snippet": "# Already configured correctly — no changes needed.\n# Re-check this quarterly as new AI bots launch.",
-            "difficulty":   "Easy (5 min)",
-            "impact":       "Medium",
+            "title":          "Maintain explicit crawler access",
+            "why_matters":    WHY_MATTERS["crawler_access"],
+            "how_to_fix":     "Your robots.txt already allows all major AI crawlers. Keep monitoring as new bots launch — add explicit Allow rules for each new agent rather than relying on default permission.",
+            "code_snippet":   "# Already configured correctly — no changes needed.\n# Re-check this quarterly as new AI bots launch.",
+            "difficulty":     "Easy (5 min)",
+            "impact":         "Medium",
+            "where_to_apply": crawler_where_to_apply,
         }
 
     # Build robots.txt block — one User-agent per target with Allow: /
@@ -114,12 +134,13 @@ def generate_fix_crawler_access(details: dict, brand_name: str, url: str) -> dic
     how_to_fix = " ".join(parts)
 
     return {
-        "title":        f"Allow {len(targets)} AI crawler(s) in robots.txt",
-        "why_matters":  WHY_MATTERS["crawler_access"],
-        "how_to_fix":   how_to_fix,
-        "code_snippet": code_snippet,
-        "difficulty":   "Easy (10 min)",
-        "impact":       _weight_to_impact(0.10),
+        "title":          f"Allow {len(targets)} AI crawler(s) in robots.txt",
+        "why_matters":    WHY_MATTERS["crawler_access"],
+        "how_to_fix":     how_to_fix,
+        "code_snippet":   code_snippet,
+        "difficulty":     "Easy (10 min)",
+        "impact":         _weight_to_impact(0.10),
+        "where_to_apply": crawler_where_to_apply,
     }
 
 
@@ -180,13 +201,22 @@ def generate_fix_llms_txt(details: dict, brand_name: str, url: str) -> dict:
         f"{site}/llms.txt with content-type text/plain. Verify with curl after deploy."
     )
 
+    llms_where_to_apply = (
+        "**Shopify:** llms.txt 是根目录文本文件，Shopify 无专门入口。"
+        "最简方式：后台 → 内容 → 文件 上传 llms.txt；"
+        "若需出现在根目录，可能需开发者协助配置路由 (这是较新的标准，原生支持有限)。\n"
+        "**其他平台 (通用):** 把 llms.txt 文件上传到网站根目录，确保可通过 你的域名/llms.txt 以 text/plain 访问。\n"
+        "**验证:** 部署后 curl 你的域名/llms.txt 或浏览器直接打开确认能看到内容。"
+    )
+
     return {
-        "title":        "Publish a complete llms.txt at site root",
-        "why_matters":  WHY_MATTERS["llms_txt"],
-        "how_to_fix":   how_to_fix,
-        "code_snippet": code_snippet,
-        "difficulty":   difficulty,
-        "impact":       _weight_to_impact(0.08),
+        "title":          "Publish a complete llms.txt at site root",
+        "why_matters":    WHY_MATTERS["llms_txt"],
+        "how_to_fix":     how_to_fix,
+        "code_snippet":   code_snippet,
+        "difficulty":     difficulty,
+        "impact":         _weight_to_impact(0.08),
+        "where_to_apply": llms_where_to_apply,
     }
 
 
@@ -300,14 +330,24 @@ def generate_fix_schema_markup(details: dict, brand_name: str, url: str) -> dict
     brand = brand_name or "[YOUR_BRAND_NAME]"
     site = _origin(url)
 
+    schema_where_to_apply = (
+        "**Shopify:** 后台 → 在线商店 → 主题 → 当前主题 → 编辑代码。"
+        "全站类型 (Organization / BreadcrumbList) 粘到 theme.liquid 的 </head> 标签前；"
+        "产品类型 (Product) 粘到 main-product.liquid。保存即生效。\n"
+        "**其他平台 (通用):** 把这段 JSON-LD 交给开发者，说\"加到网站首页 <head> 区域\"；"
+        "WordPress 可用 \"Insert Headers and Footers\" 插件粘到 Header。\n"
+        "**验证:** 打开 https://search.google.com/test/rich-results，粘贴你的页面 URL，确认无报错。"
+    )
+
     if not missing:
         return {
-            "title":        "Validate existing schema with Google Rich Results",
-            "why_matters":  WHY_MATTERS["schema_markup"],
-            "how_to_fix":   "All 4 core Schema.org types are present. Run https://search.google.com/test/rich-results on each page type to validate they parse without errors — then expand to product-level coverage on all SKU pages.",
-            "code_snippet": "# All core types found. Test each page at:\n# https://search.google.com/test/rich-results",
-            "difficulty":   "Easy (15 min)",
-            "impact":       "Medium",
+            "title":          "Validate existing schema with Google Rich Results",
+            "why_matters":    WHY_MATTERS["schema_markup"],
+            "how_to_fix":     "All 4 core Schema.org types are present. Run https://search.google.com/test/rich-results on each page type to validate they parse without errors — then expand to product-level coverage on all SKU pages.",
+            "code_snippet":   "# All core types found. Test each page at:\n# https://search.google.com/test/rich-results",
+            "difficulty":     "Easy (15 min)",
+            "impact":         "Medium",
+            "where_to_apply": schema_where_to_apply,
         }
 
     blocks = []
@@ -327,12 +367,13 @@ def generate_fix_schema_markup(details: dict, brand_name: str, url: str) -> dict
     )
 
     return {
-        "title":        f"Add {len(missing)} missing Schema.org type(s)",
-        "why_matters":  WHY_MATTERS["schema_markup"],
-        "how_to_fix":   how_to_fix,
-        "code_snippet": code_snippet,
-        "difficulty":   "Medium (1 hour)",
-        "impact":       _weight_to_impact(0.12),
+        "title":          f"Add {len(missing)} missing Schema.org type(s)",
+        "why_matters":    WHY_MATTERS["schema_markup"],
+        "how_to_fix":     how_to_fix,
+        "code_snippet":   code_snippet,
+        "difficulty":     "Medium (1 hour)",
+        "impact":         _weight_to_impact(0.12),
+        "where_to_apply": schema_where_to_apply,
     }
 
 

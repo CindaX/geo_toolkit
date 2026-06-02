@@ -21,6 +21,7 @@ English only — Helvetica (built-in, no font files needed → Cloud-safe).
 
 from __future__ import annotations
 
+import re as _re
 from datetime import datetime
 from io import BytesIO
 
@@ -28,6 +29,8 @@ from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import (
     KeepTogether,
     PageBreak,
@@ -70,6 +73,38 @@ _BAND_POOR   = HexColor("#F8D7DA")   # pale red, status band
 _BAND_NONE   = HexColor("#E5E7EB")   # pale gray, failed status band
 
 
+# ── CJK font registration ────────────────────────────────────────────────────
+# Helvetica (reportlab's default) has no CJK glyphs — Chinese text renders as
+# tofu squares. ``where_to_apply`` ships in Chinese for the Shopify audience,
+# so register the bundled ``STSong-Light`` CID font once at import time and
+# use it for the platform-guidance paragraphs.
+#
+# STSong-Light is a CID font: the PDF embeds only the CMap, and the viewing
+# application supplies the actual glyphs from its system Chinese fonts.
+# Modern macOS / Windows / iOS / Android all ship CJK fonts so this works
+# out of the box for end users.
+_CJK_FONT_REGISTERED = False
+
+
+def _ensure_cjk_font() -> str:
+    """Register ``STSong-Light`` once. Returns the font name to use in styles.
+
+    If registration fails (e.g. reportlab build without CID support — rare),
+    falls back to ``Helvetica`` and Chinese will render as tofu squares —
+    same as before this fix, never worse.
+    """
+    global _CJK_FONT_REGISTERED
+    if _CJK_FONT_REGISTERED:
+        return "STSong-Light"
+    try:
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        _CJK_FONT_REGISTERED = True
+        return "STSong-Light"
+    except Exception as exc:
+        print(f"[pdf_generator] CJK font registration failed: {exc} — Chinese will be tofu", flush=True)
+        return "Helvetica"
+
+
 def _band_for(score) -> HexColor:
     if score is None or not isinstance(score, (int, float)):
         return _BAND_NONE
@@ -88,6 +123,21 @@ def _status_text_color(score) -> HexColor:
     if score >= 40:
         return _WARNING
     return _DANGER
+
+
+def _markdown_to_xml(text: str) -> str:
+    """Convert the minimal Markdown subset we use (**bold**) into reportlab's
+    mini-HTML, while keeping literal ``<`` / ``>`` from being parsed as tags.
+
+    Used for ``fix["where_to_apply"]`` content, which is authored as Markdown
+    so it stays readable in Slack / docs / etc. — but reportlab's Paragraph
+    parser only understands a small HTML-ish subset. We escape angle brackets
+    + ampersands first (so a literal ``</head>`` survives), then convert
+    ``**xxx**`` to ``<b>xxx</b>``. Italics are not used in our copy.
+    """
+    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    text = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    return text
 
 
 def _difficulty_bucket(difficulty: str) -> str:
@@ -185,6 +235,15 @@ def _make_styles():
         "meta":      ParagraphStyle(
             "Meta", parent=base["Normal"],
             fontSize=10, leading=13, textColor=HexColor("#4B5563"),
+        ),
+        # CJK-capable body style — used for ``where_to_apply`` paragraphs
+        # which contain Chinese. STSong-Light has both ASCII and CJK ranges,
+        # so mixed-language lines (e.g. "**Shopify:** 后台 → 产品") render
+        # cleanly with a single style.
+        "body_cjk":  ParagraphStyle(
+            "BodyCJK", parent=base["BodyText"],
+            fontSize=11, leading=15, spaceAfter=6,
+            fontName=_ensure_cjk_font(),
         ),
     }
 
@@ -352,6 +411,20 @@ def _build_dimension_page(d: dict, styles: dict) -> list:
             flow.append(_section_heading("Ready-to-use code", styles))
             flow.append(Spacer(1, 0.08 * inch))
             flow.append(_build_code_block(snippet, styles))
+
+        where = (fix.get("where_to_apply") or "").strip()
+        if where:
+            flow.append(Spacer(1, 0.2 * inch))
+            flow.append(_section_heading("How to apply this (Shopify & others)", styles))
+            flow.append(Spacer(1, 0.08 * inch))
+            # Render each non-blank line as its own Paragraph for clean
+            # vertical rhythm (the source uses **Label:** body per line).
+            # Use the CJK-capable body style so Chinese characters render
+            # instead of tofu squares.
+            for raw_line in where.split("\n"):
+                line = raw_line.strip()
+                if line:
+                    flow.append(Paragraph(_markdown_to_xml(line), styles["body_cjk"]))
     else:
         flow.append(Paragraph(
             "<i>Detailed fix instructions unavailable for this dimension. "

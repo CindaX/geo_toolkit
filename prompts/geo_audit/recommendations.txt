@@ -25,6 +25,16 @@ For each fix:
 - "difficulty": "Easy (1-2 hours)" / "Medium (1-2 days)" / "Hard (1+ week)"
 - "method": 2-3 sentences describing exactly what to do, with no vague advice. Name specific files to edit, specific sections to add, or specific tools to use.
 - "code_snippet": a ready-to-use code or text snippet implementing the fix. For content fixes (brand_clarity, citability, factual_density): a rewritten example paragraph showing what good looks like. For E-E-A-T: an example author bio block or trust-signal HTML. For competitive: an example comparison-page outline. Use empty string "" only if truly nothing pasteable applies.
+- "where_to_apply": platform placement guidance in Markdown. **Critical**: the audience is a Shopify e-commerce operator, not a developer. Write so someone who has never touched code can follow it. Avoid bare jargon like "<head>", "web root", "模板文件" without a click-trail or hand-off note. The field MUST contain three labelled sections in this order:
+    **Shopify:** the concrete admin path + click-by-click steps for this fix. Examples by fix type:
+       - rewriting product copy → 后台 → 产品 → 选产品 → 描述框
+       - updating a static page → 后台 → 在线商店 → 页面 → 选页面 → 内容
+       - adding a blog post → 后台 → 在线商店 → 博客文章 → 添加博客文章
+       - editing About/Contact metadata → 后台 → 在线商店 → 偏好设置
+    **其他平台 (通用):** one short sentence on where a non-technical user should put it / who to hand it to (WordPress / Webflow / "give to your developer").
+    **验证:** how to confirm the change took effect (a URL to check, a tool to run, a visible change to look for).
+  Use Chinese for the labelled section bodies (audience is Chinese-speaking ops); the labels themselves stay as written above.
+  **No emojis or special symbols** anywhere in ``where_to_apply`` — the PDF renders it with a CJK font that has no emoji glyphs, so any emoji would print as tofu squares. For warnings or emphasis use Chinese words: "注意:", "重要:", "提示:".
 
 Also generate:
 - "roadmap": object with keys "week1", "week2", "week3", "week4" — each an array of 2-3 action strings for that week, ordered easy-to-hard

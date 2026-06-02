@@ -202,12 +202,13 @@ def generate_recommendations(
         # Normalize to the unified schema used by both static + LLM fixes so
         # the PDF renderer can treat them identically.
         out[dim] = {
-            "title":        str(fix.get("title", "")).strip(),
-            "why_matters":  WHY_MATTERS.get(dim, ""),
-            "how_to_fix":   str(fix.get("method", "")).strip(),
-            "code_snippet": str(fix.get("code_snippet", "") or "").strip(),
-            "difficulty":   str(fix.get("difficulty", "")).strip(),
-            "impact":       str(fix.get("impact", "")).strip(),
+            "title":          str(fix.get("title", "")).strip(),
+            "why_matters":    WHY_MATTERS.get(dim, ""),
+            "how_to_fix":     str(fix.get("method", "")).strip(),
+            "code_snippet":   str(fix.get("code_snippet", "") or "").strip(),
+            "difficulty":     str(fix.get("difficulty", "")).strip(),
+            "impact":         str(fix.get("impact", "")).strip(),
+            "where_to_apply": str(fix.get("where_to_apply", "") or "").strip(),
         }
     return out
 

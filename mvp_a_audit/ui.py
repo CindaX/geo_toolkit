@@ -48,6 +48,16 @@ _INDUSTRIES = [
     "Education", "Healthcare", "Finance", "Other",
 ]
 
+# Report-language selector — drives the LLM fix output language AND the
+# bilingual ``where_to_apply`` field on the 3 static templates. Labels are
+# bilingual on purpose so a Chinese-speaking user reading the English UI
+# can still find the option. The values are kept short (2-letter ISO 639-1)
+# so adding ``ja`` / ``es`` / etc. later is a one-line dict extension.
+_LANGUAGE_OPTIONS: dict[str, str] = {
+    "en": "English",
+    "zh": "中文",
+}
+
 _DIM_LABELS: dict[str, str] = {
     "crawler_access":     "AI Crawler Access",
     "llms_txt":           "llms.txt Presence",
@@ -68,6 +78,7 @@ def _init_audit_state() -> None:
         "audit_url":              "",
         "audit_brand_name":       "",
         "audit_industry":         "SaaS",
+        "audit_language":         "en",   # "en" / "zh" — drives LLM fix output + static where_to_apply
         "audit_results":          {},
         "audit_geo_score":        None,
         "audit_geo_grade":        None,
@@ -188,6 +199,26 @@ def _render_audit_input() -> None:
         key="audit_input_industry",
     )
 
+    # Report language — only controls the per-dimension fix content
+    # (LLM-generated text + bilingual static where_to_apply). The report
+    # skeleton (dimension labels, headings) stays English in this iteration.
+    lang_codes = list(_LANGUAGE_OPTIONS.keys())
+    current_lang = st.session_state.get("audit_language", "en")
+    if current_lang not in lang_codes:
+        current_lang = "en"
+    language_label = st.selectbox(
+        "Report Language / 报告语言",
+        options=[_LANGUAGE_OPTIONS[c] for c in lang_codes],
+        index=lang_codes.index(current_lang),
+        key="audit_input_language",
+        help="Fix recommendations will be generated in this language. The report layout (dimension names, headers) stays English.",
+    )
+    # Reverse-lookup the display label back to its ISO code.
+    language = next(
+        (code for code, label in _LANGUAGE_OPTIONS.items() if label == language_label),
+        "en",
+    )
+
     st.markdown("---")
     col_back, col_run = st.columns([1, 4])
     with col_back:
@@ -210,6 +241,7 @@ def _render_audit_input() -> None:
                 st.session_state.audit_url = url.strip()
                 st.session_state.audit_brand_name = brand_name.strip()
                 st.session_state.audit_industry = industry
+                st.session_state.audit_language = language
                 st.session_state.audit_step = "scanning"
                 st.rerun()
 
@@ -291,7 +323,8 @@ def _render_audit_scanning() -> None:
     # Generate per-dimension fixes (static templates + 1 LLM call for 5 dims).
     # Adds ~30-60s; surface it so the user knows we're still working.
     status_text.markdown("✨ **Generating personalized fix recommendations…**")
-    _merge_fixes_into_results(audit_results, brand_name, url, industry)
+    language = st.session_state.get("audit_language", "en")
+    _merge_fixes_into_results(audit_results, brand_name, url, industry, language=language)
 
     final = _build_audit_result(url, brand_name, industry, audit_results)
     st.session_state.audit_results = final["results"]

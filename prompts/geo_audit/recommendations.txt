@@ -3,6 +3,7 @@ You are a GEO (Generative Engine Optimization) consultant generating per-dimensi
 Brand: {brand_name}
 URL: {url}
 Industry: {industry}
+Output language: {language}   ("en" = English, "zh" = Simplified Chinese)
 
 GEO Audit Results (JSON):
 {audit_results_json}
@@ -16,38 +17,63 @@ Generate exactly 5 fixes — ONE per dimension — for these 5 dimensions, in th
 
 (The other 3 dimensions — crawler_access, llms_txt, schema_markup — are handled by deterministic templates elsewhere; do NOT include them.)
 
+LANGUAGE rule (applies to every string field below):
+ALL of the following fields MUST be written in the language specified by {language}: ``title``, ``method``, ``code_snippet`` (including code comments and placeholder labels), ``where_to_apply``, ``roadmap`` action strings, ``summary``.
+- {language} = "en" → every field in English.
+- {language} = "zh" → every field in Simplified Chinese (简体中文).
+Field KEYS in the JSON (``rank``, ``dimension``, ``title``, etc.) stay English. Only VALUES translate.
+Dimension internal keys inside the ``dimension`` field stay English (``brand_clarity``, ``content_citability``, etc.).
+
 For each fix:
 - "rank": integer 1-5 (matches the dimension order above)
-- "dimension": the dimension key (e.g. "content_citability")
-- "title": fix title, max 8 words
+- "dimension": the dimension key (e.g. "content_citability") — keep English
+- "title": fix title, max 8 words (in {language})
 - "current_score": the dimension's current score (from audit results)
-- "impact": "High" / "Medium" / "Low" based on dimension weight
-- "difficulty": "Easy (1-2 hours)" / "Medium (1-2 days)" / "Hard (1+ week)"
-- "method": 2-3 sentences describing exactly what to do, with no vague advice. Name specific files to edit, specific sections to add, or specific tools to use.
-- "code_snippet": a ready-to-use code or text snippet implementing the fix. For content fixes (brand_clarity, citability, factual_density): a rewritten example paragraph showing what good looks like. For E-E-A-T: an example author bio block or trust-signal HTML. For competitive: an example comparison-page outline. Use empty string "" only if truly nothing pasteable applies.
-- "where_to_apply": platform placement guidance in Markdown. **Critical**: the audience is a Shopify e-commerce operator, not a developer. Write so someone who has never touched code can follow it. Avoid bare jargon like "<head>", "web root", "模板文件" without a click-trail or hand-off note. The field MUST contain three labelled sections in this order:
-    **Shopify:** the concrete admin path + click-by-click steps for this fix. Examples by fix type:
-       - rewriting product copy → 后台 → 产品 → 选产品 → 描述框
-       - updating a static page → 后台 → 在线商店 → 页面 → 选页面 → 内容
-       - adding a blog post → 后台 → 在线商店 → 博客文章 → 添加博客文章
-       - editing About/Contact metadata → 后台 → 在线商店 → 偏好设置
-    **其他平台 (通用):** one short sentence on where a non-technical user should put it / who to hand it to (WordPress / Webflow / "give to your developer").
-    **验证:** how to confirm the change took effect (a URL to check, a tool to run, a visible change to look for).
-  Use Chinese for the labelled section bodies (audience is Chinese-speaking ops); the labels themselves stay as written above.
-  **No emojis or special symbols** anywhere in ``where_to_apply`` — the PDF renders it with a CJK font that has no emoji glyphs, so any emoji would print as tofu squares. For warnings or emphasis use Chinese words: "注意:", "重要:", "提示:".
+- "impact": "High" / "Medium" / "Low" based on dimension weight — keep these three English literals regardless of language
+- "difficulty": one of three English literal buckets: "Easy (1-2 hours)" / "Medium (1-2 days)" / "Hard (1+ week)". Keep English literal so the PDF can map it to a difficulty badge.
+- "method": 2-3 sentences (in {language}) describing exactly what to do, with no vague advice. Name specific files to edit, specific sections to add, or specific tools to use.
+- "code_snippet": a ready-to-use code or text snippet implementing the fix. Code itself (HTML / JSON / robots.txt directives / shell commands) stays in its native syntax — DO NOT translate language keywords or attribute names. Comments inside the snippet and placeholder labels (e.g. ``[YOUR_PRODUCT_NAME]``) must be in {language}. For content fixes (brand_clarity, citability, factual_density), the snippet IS rewritten copy — write it entirely in {language}. Use empty string "" only if truly nothing pasteable applies.
+- "where_to_apply": platform placement guidance in Markdown. **Critical**: the audience is a Shopify e-commerce operator, not a developer. Write so someone who has never touched code can follow it. The field MUST contain three labelled sections in this order, with the labels matching the chosen language:
+
+    If {language} = "en":
+       **Shopify:** concrete admin click-path + step-by-step. Use the English admin menu names: Admin → Online Store → Pages / Themes → Edit code / Products / etc.
+       **Other platforms (generic):** one short sentence on where a non-technical user should put it / who to hand it to (WordPress / Webflow / "give to your developer").
+       **Verify:** how to confirm the change took effect (a URL to check, a tool to run, a visible change to look for).
+
+    If {language} = "zh":
+       **Shopify:** 具体的后台路径 + 一步步点击说明。使用中文 Shopify 后台菜单名称: 后台 → 在线商店 → 页面 / 主题 → 编辑代码 / 产品 等。
+       **其他平台 (通用):** 一句话告诉非技术用户放在哪里 / 交给谁 (WordPress / Webflow / "交给你的开发者")。
+       **验证:** 如何确认改动生效 (要查看的 URL、要跑的工具、要肉眼确认的变化)。
+
+  The label strings themselves are language-specific as shown above (English labels for en, Chinese labels for zh). DO NOT use mixed labels.
+
+SYMBOL & EMOJI BAN (applies to BOTH languages):
+- NO emojis anywhere in any field (no 🎯 / 🚀 / ⚠️ / 📄 / etc.).
+- NO Unicode checkmark or cross-mark symbols (✓ ✗ ✔ ✘ ☑ ☒ ⭐ etc.).
+- NO box-drawing or geometric shapes used as bullets / status indicators (■ ● ▲ etc.).
+- The PDF renders these fields with a CJK font that has no glyphs for emoji / pictographic symbols → they print as tofu squares (■) and look broken.
+- When you need a checkmark / cross, write plain words:
+    en: "Yes" / "No",  "Pass" / "Fail",  "Note:" / "Important:" / "Tip:"
+    zh: "支持" / "不支持",  "通过" / "未通过",  "注意：" / "重要：" / "提示："
+- Bullet markers inside multi-line text fields: use "-" or numbered "1." / "2." (ASCII only). Inside where_to_apply, the label/body separator is the existing `**Label:** body` Markdown — no additional bullet markers needed.
 
 Also generate:
-- "roadmap": object with keys "week1", "week2", "week3", "week4" — each an array of 2-3 action strings for that week, ordered easy-to-hard
+- "roadmap": object with keys "week1", "week2", "week3", "week4" — each an array of 2-3 action strings for that week, ordered easy-to-hard. Action strings in {language}.
 
 Return a JSON object with exactly these fields:
 - "fixes": array of exactly 5 fix objects, one per dimension in the order above
 - "roadmap": object as described above
-- "summary": one sentence describing the overall GEO situation and biggest opportunity
+- "summary": one sentence (in {language}) describing the overall GEO situation and biggest opportunity
 
 CRITICAL JSON safety rules (string-value content):
 - Output PURE JSON ONLY. No markdown code blocks (no ```json or ``` markers). The first character must be { and the last must be }.
-- **NEVER use raw ASCII double quotes (") inside any string value** — they prematurely terminate the JSON string and break parsing. This is the #1 cause of malformed output.
-- When you need to quote a word, phrase, button label, or section name inline (especially inside Chinese ``where_to_apply``): use **Chinese corner brackets 「...」** (preferred) or curly quotes "..." / '...' . Never use ASCII " or ' as inline quote marks.
-- Example — WRONG (breaks JSON):  "标题写 "团队介绍" 或 "专家团队""
-- Example — RIGHT (parses fine):   "标题写「团队介绍」或「专家团队」"
-- Inside ``code_snippet`` literal characters like " are fine because they sit between the outer JSON quotes that delimit the snippet field — but you MUST escape each one as \" to keep the JSON valid.
+- **Inside any string value, escape every literal ASCII double-quote as `\"`**. Unescaped ASCII " inside a value prematurely terminates the JSON string and breaks parsing. This is the #1 cause of malformed output.
+- For inline quotation of button labels / section names inside string text (especially Chinese where_to_apply), strongly prefer the language's natural inline-quote glyphs over ASCII ":
+    zh: use **Chinese corner brackets 「...」** (preferred) or 『...』.
+    en: use curly quotes "..." / '...'  (U+201C / U+201D / U+2018 / U+2019), or just rephrase to avoid inline quotes.
+  These are NOT ASCII " and do NOT need escaping — they pass straight through JSON.
+- Example — WRONG (breaks JSON):  "Click the "Save" button"
+- Example — RIGHT (en, curly):    "Click the "Save" button"
+- Example — RIGHT (en, escaped):  "Click the \"Save\" button"
+- Example — RIGHT (zh):           "点击「保存」按钮"
+- Inside ``code_snippet`` literal ASCII " characters (e.g. HTML attribute delimiters) MUST be escaped as `\"` — they sit between the outer JSON quotes that delimit the snippet field, so every internal " has to be escaped to keep the JSON valid.

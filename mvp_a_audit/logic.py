@@ -92,8 +92,15 @@ def prepare_inputs(url: str, brand_name: str, industry: str) -> dict:
 
 # ── Programmatic full-audit (non-streaming) ───────────────────────────────────
 
-def run_audit(url: str, brand_name: str, industry: str) -> dict:
+def run_audit(
+    url: str, brand_name: str, industry: str, language: str = "en"
+) -> dict:
     """Run all 8 analyzers in parallel and return a complete audit result dict.
+
+    ``language`` ("en" or "zh") controls the output language of the LLM fix
+    fields and the static where_to_apply guidance — the rest of the report
+    skeleton (dimension names, "What we found", page headers, 30-day plan)
+    stays English in this iteration.
 
     Suitable for programmatic use. The Streamlit app drives analyzers directly
     so it can update a progress bar via as_completed().
@@ -118,7 +125,7 @@ def run_audit(url: str, brand_name: str, industry: str) -> dict:
             _warn_if_over_budget()
 
     # Merge per-dimension fixes (static templates + 1 LLM call for 5 dims).
-    _merge_fixes_into_results(results, brand_name, url, industry)
+    _merge_fixes_into_results(results, brand_name, url, industry, language=language)
 
     return _build_audit_result(url, brand_name, industry, results)
 
@@ -156,9 +163,14 @@ def generate_recommendations(
     brand_name: str,
     url: str,
     industry: str,
+    language: str = "en",
 ) -> dict[str, dict]:
     """Generate one fix per LLM-handled dimension (brand_clarity / content_citability /
     eeat_signals / competitive / factual_density).
+
+    ``language`` ("en" or "zh") is passed straight to the prompt — Claude
+    emits all fix-content fields (title / method / code_snippet / where_to_apply
+    / roadmap / summary) in the specified language.
 
     Returns a ``{dimension_key: fix_dict}`` map for direct merging into
     ``run_audit``'s results. The fix_dict is normalized to the unified fix
@@ -186,6 +198,7 @@ def generate_recommendations(
         .replace("{brand_name}", brand_name)
         .replace("{url}", url)
         .replace("{industry}", industry)
+        .replace("{language}", language)
         .replace("{audit_results_json}", json.dumps(results_summary, ensure_ascii=False, indent=2))
     )
 
@@ -222,11 +235,15 @@ def _merge_fixes_into_results(
     brand_name: str,
     url: str,
     industry: str,
+    language: str = "en",
 ) -> None:
     """Mutate ``results`` in place to add a ``fix`` field to each dimension.
 
     - Static templates (3 deterministic dimensions) — instant, no LLM cost.
-    - LLM recommendations (5 dimensions) — one Claude call covers all 5.
+      The ``where_to_apply`` field follows ``language``; other static-fix
+      fields stay English (per current scope).
+    - LLM recommendations (5 dimensions) — one Claude call covers all 5,
+      with every fix-content field emitted in ``language``.
     - Failed analyzers (score is None / error set) — ``fix`` stays ``None``.
 
     All paths are graceful: if Claude is unreachable, static-template
@@ -245,12 +262,13 @@ def _merge_fixes_into_results(
             result.get("details", {}) or {},
             brand_name,
             url,
+            language=language,
         )
         result["fix"] = static_fix  # may be None if dim_key is LLM-handled
 
     # Phase 2: LLM fixes for the 5 dimensions that don't have a static template
     try:
-        llm_fixes = generate_recommendations(results, brand_name, url, industry)
+        llm_fixes = generate_recommendations(results, brand_name, url, industry, language=language)
     except Exception as exc:
         logger.warning("Per-dimension LLM fixes failed: %s", exc)
         llm_fixes = {}

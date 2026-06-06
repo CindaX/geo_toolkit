@@ -22,14 +22,21 @@ renderer can treat them identically):
         "where_to_apply":  str,    # Markdown: Shopify path + generic fallback + verify step
     }
 
-``where_to_apply`` always contains three labelled Markdown sections:
-    **Shopify:** concrete admin path + click-by-click steps
-    **其他平台 (通用):** one-line generic placement (give to dev / common UI)
-    **验证:** how to confirm the change took effect
+``where_to_apply`` always contains three labelled Markdown sections.
+Language-dependent label set:
+  en:  **Shopify:** / **Other platforms (generic):** / **Verify:**
+  zh:  **Shopify:** / **其他平台 (通用):** / **验证:**
 
 Audience is primarily Shopify e-commerce operators, not developers — the
 text should avoid raw dev jargon ("<head>", "web root", "模板文件" alone)
 unless paired with a click-trail or hand-off instruction.
+
+Language scope (intentional):
+- ONLY ``where_to_apply`` is bilingual. ``title`` / ``how_to_fix`` /
+  ``code_snippet`` / ``why_matters`` stay English for the 3 static
+  dimensions — that keeps the static path deterministic and avoids
+  translation drift on technical strings. The 5 LLM dimensions get
+  fully-translated content from ``recommendations.txt`` instead.
 """
 
 from __future__ import annotations
@@ -79,24 +86,93 @@ def _origin(url: str) -> str:
     return url.rstrip("/") if url else "https://your-site.com"
 
 
-# ── Template 1: crawler_access ───────────────────────────────────────────────
+# ── Bilingual where_to_apply variants (en + zh) ──────────────────────────────
+# Selecting at module level keeps the per-template functions thin: they look
+# the variant up by ``language`` and never juggle inline conditionals.
+# Easy extension point for future locales — add a new key to each dict.
 
-_BOT_USER_AGENTS = ["GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended"]
-
-
-def generate_fix_crawler_access(details: dict, brand_name: str, url: str) -> dict:
-    disallowed = list(details.get("disallowed", []) or [])
-    not_mentioned = list(details.get("not_mentioned", []) or [])
-
-    targets = disallowed + not_mentioned
-    crawler_where_to_apply = (
+_WHERE_TO_APPLY_CRAWLER: dict[str, str] = {
+    "en": (
+        "**Shopify:** Note: Shopify doesn't let you edit robots.txt directly — you have to create a template. "
+        "Admin → Online Store → Themes → Edit code → Templates folder → Add a new template → "
+        "choose type robots.txt → Create, then add the rules below. "
+        "Important: Shopify's defaults are already SEO-optimized — only ADD the new AI-crawler rules, "
+        "do NOT remove the defaults; editing the wrong line can drop your traffic significantly. "
+        "If unsure, hand this to your Shopify developer.\n"
+        "**Other platforms (generic):** Edit the robots.txt file at your site root directly "
+        "(it lives at yourstore.com/robots.txt).\n"
+        "**Verify:** After deployment, open your-domain.com/robots.txt in a browser and confirm "
+        "the new rules are present."
+    ),
+    "zh": (
         "**Shopify:** 注意：Shopify 不能直接编辑 robots.txt，需创建模板：后台 → 在线商店 → 主题 → 编辑代码 → "
         "Templates 文件夹 → Add a new template → 类型选 robots.txt → 创建，然后加入下面的规则。"
         "重要提醒：Shopify 默认规则已对 SEO 优化，只新增 AI 爬虫规则、不要删默认规则，改错可能导致流量大幅下降。"
         "不确定就把这段交给 Shopify 开发者。\n"
         "**其他平台 (通用):** 直接编辑网站根目录的 robots.txt 文件 (位于 yourstore.com/robots.txt)。\n"
         "**验证:** 部署后浏览器访问 你的域名/robots.txt，确认新规则在里面。"
-    )
+    ),
+}
+
+_WHERE_TO_APPLY_LLMS: dict[str, str] = {
+    "en": (
+        "**Shopify:** llms.txt is a root-level text file; Shopify has no dedicated panel for it. "
+        "Easiest path: Admin → Content → Files → upload llms.txt. To serve it at the actual site root "
+        "your developer may need to configure routing (this is a newer standard with limited native support).\n"
+        "**Other platforms (generic):** Upload llms.txt to your web root so it's reachable at "
+        "your-domain.com/llms.txt with content-type text/plain.\n"
+        "**Verify:** After deployment, run curl your-domain.com/llms.txt or open it in a browser "
+        "to confirm the content shows."
+    ),
+    "zh": (
+        "**Shopify:** llms.txt 是根目录文本文件，Shopify 无专门入口。"
+        "最简方式：后台 → 内容 → 文件 上传 llms.txt；"
+        "若需出现在根目录，可能需开发者协助配置路由 (这是较新的标准，原生支持有限)。\n"
+        "**其他平台 (通用):** 把 llms.txt 文件上传到网站根目录，确保可通过 你的域名/llms.txt 以 text/plain 访问。\n"
+        "**验证:** 部署后 curl 你的域名/llms.txt 或浏览器直接打开确认能看到内容。"
+    ),
+}
+
+_WHERE_TO_APPLY_SCHEMA: dict[str, str] = {
+    "en": (
+        "**Shopify:** Admin → Online Store → Themes → current theme → Edit code. "
+        "Paste site-wide types (Organization / BreadcrumbList) right before the </head> tag in theme.liquid; "
+        "paste product-only types (Product) into main-product.liquid. Save and it goes live.\n"
+        "**Other platforms (generic):** Hand the JSON-LD to your developer with the instruction "
+        "\"add to the homepage <head> section\"; WordPress users can use the "
+        "\"Insert Headers and Footers\" plugin and paste it into the Header.\n"
+        "**Verify:** Open https://search.google.com/test/rich-results, paste your page URL, "
+        "and confirm there are no errors."
+    ),
+    "zh": (
+        "**Shopify:** 后台 → 在线商店 → 主题 → 当前主题 → 编辑代码。"
+        "全站类型 (Organization / BreadcrumbList) 粘到 theme.liquid 的 </head> 标签前；"
+        "产品类型 (Product) 粘到 main-product.liquid。保存即生效。\n"
+        "**其他平台 (通用):** 把这段 JSON-LD 交给开发者，说「加到网站首页 <head> 区域」；"
+        "WordPress 可用 「Insert Headers and Footers」 插件粘到 Header。\n"
+        "**验证:** 打开 https://search.google.com/test/rich-results，粘贴你的页面 URL，确认无报错。"
+    ),
+}
+
+
+def _pick_where_to_apply(variants: dict[str, str], language: str) -> str:
+    """Pick the language-matched where_to_apply, falling back to English."""
+    return variants.get(language) or variants["en"]
+
+
+# ── Template 1: crawler_access ───────────────────────────────────────────────
+
+_BOT_USER_AGENTS = ["GPTBot", "ClaudeBot", "PerplexityBot", "Google-Extended"]
+
+
+def generate_fix_crawler_access(
+    details: dict, brand_name: str, url: str, language: str = "en"
+) -> dict:
+    disallowed = list(details.get("disallowed", []) or [])
+    not_mentioned = list(details.get("not_mentioned", []) or [])
+
+    targets = disallowed + not_mentioned
+    crawler_where_to_apply = _pick_where_to_apply(_WHERE_TO_APPLY_CRAWLER, language)
 
     if not targets:
         # All 4 bots explicitly allowed — nothing to fix
@@ -156,7 +232,9 @@ _LLMS_SECTION_HINTS: dict[str, str] = {
 }
 
 
-def generate_fix_llms_txt(details: dict, brand_name: str, url: str) -> dict:
+def generate_fix_llms_txt(
+    details: dict, brand_name: str, url: str, language: str = "en"
+) -> dict:
     sections_found = [s.lower() for s in (details.get("sections_found") or [])]
     missing = [s for s in _LLMS_CORE_SECTIONS if s not in sections_found]
     word_count = int(details.get("word_count") or 0)
@@ -201,13 +279,7 @@ def generate_fix_llms_txt(details: dict, brand_name: str, url: str) -> dict:
         f"{site}/llms.txt with content-type text/plain. Verify with curl after deploy."
     )
 
-    llms_where_to_apply = (
-        "**Shopify:** llms.txt 是根目录文本文件，Shopify 无专门入口。"
-        "最简方式：后台 → 内容 → 文件 上传 llms.txt；"
-        "若需出现在根目录，可能需开发者协助配置路由 (这是较新的标准，原生支持有限)。\n"
-        "**其他平台 (通用):** 把 llms.txt 文件上传到网站根目录，确保可通过 你的域名/llms.txt 以 text/plain 访问。\n"
-        "**验证:** 部署后 curl 你的域名/llms.txt 或浏览器直接打开确认能看到内容。"
-    )
+    llms_where_to_apply = _pick_where_to_apply(_WHERE_TO_APPLY_LLMS, language)
 
     return {
         "title":          "Publish a complete llms.txt at site root",
@@ -322,7 +394,9 @@ _SCHEMA_TEMPLATE_FUNCS = {
 }
 
 
-def generate_fix_schema_markup(details: dict, brand_name: str, url: str) -> dict:
+def generate_fix_schema_markup(
+    details: dict, brand_name: str, url: str, language: str = "en"
+) -> dict:
     found = set(details.get("found_core_types") or [])
     checked = list(details.get("core_types_checked") or _SCHEMA_CORE_TYPES)
     missing = [t for t in checked if t not in found]
@@ -330,14 +404,7 @@ def generate_fix_schema_markup(details: dict, brand_name: str, url: str) -> dict
     brand = brand_name or "[YOUR_BRAND_NAME]"
     site = _origin(url)
 
-    schema_where_to_apply = (
-        "**Shopify:** 后台 → 在线商店 → 主题 → 当前主题 → 编辑代码。"
-        "全站类型 (Organization / BreadcrumbList) 粘到 theme.liquid 的 </head> 标签前；"
-        "产品类型 (Product) 粘到 main-product.liquid。保存即生效。\n"
-        "**其他平台 (通用):** 把这段 JSON-LD 交给开发者，说\"加到网站首页 <head> 区域\"；"
-        "WordPress 可用 \"Insert Headers and Footers\" 插件粘到 Header。\n"
-        "**验证:** 打开 https://search.google.com/test/rich-results，粘贴你的页面 URL，确认无报错。"
-    )
+    schema_where_to_apply = _pick_where_to_apply(_WHERE_TO_APPLY_SCHEMA, language)
 
     if not missing:
         return {
@@ -387,9 +454,17 @@ _TEMPLATES = {
 
 
 def generate_static_fix(
-    dimension: str, details: dict, brand_name: str, url: str
+    dimension: str,
+    details: dict,
+    brand_name: str,
+    url: str,
+    language: str = "en",
 ) -> dict | None:
     """Return a unified-schema fix dict for static dimensions, else ``None``.
+
+    ``language`` ("en" or "zh") only affects the bilingual ``where_to_apply``
+    field — title / how_to_fix / code_snippet stay English. See module
+    docstring for the rationale.
 
     Returns ``None`` (not a raise) if ``dimension`` is one of the LLM-handled
     dimensions or if template generation fails — callers fall back to the
@@ -399,7 +474,7 @@ def generate_static_fix(
     if func is None:
         return None
     try:
-        return func(details or {}, brand_name or "", url or "")
+        return func(details or {}, brand_name or "", url or "", language=language)
     except Exception as exc:
         print(f"[fix_templates] {dimension} template failed: {exc}", flush=True)
         return None

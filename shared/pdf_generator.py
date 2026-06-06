@@ -31,6 +31,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from reportlab.platypus import (
     KeepTogether,
     PageBreak,
@@ -75,14 +76,25 @@ _BAND_NONE   = HexColor("#E5E7EB")   # pale gray, failed status band
 
 # ── CJK font registration ────────────────────────────────────────────────────
 # Helvetica (reportlab's default) has no CJK glyphs — Chinese text renders as
-# tofu squares. ``where_to_apply`` ships in Chinese for the Shopify audience,
-# so register the bundled ``STSong-Light`` CID font once at import time and
-# use it for the platform-guidance paragraphs.
+# tofu squares. Both the static templates' ``where_to_apply`` AND the LLM
+# fix output (title / how_to_fix / code_snippet / where_to_apply) ship in
+# Chinese when language="zh", so we use the bundled ``STSong-Light`` CID
+# font for ALL content body styles — not just where_to_apply.
 #
 # STSong-Light is a CID font: the PDF embeds only the CMap, and the viewing
 # application supplies the actual glyphs from its system Chinese fonts.
 # Modern macOS / Windows / iOS / Android all ship CJK fonts so this works
 # out of the box for end users.
+#
+# Trade-off: STSong-Light is a serif CJK font with no separate bold variant.
+# ASCII English text renders correctly but in a serif Chinese style (slightly
+# different from Helvetica) — acceptable since the alternative is tofu for
+# every Chinese fix field.
+#
+# We use ``registerFontFamily`` to point the bold / italic / boldItalic slots
+# at the same STSong-Light face, so reportlab's <b> / <i> tags don't try to
+# resolve a non-existent ``STSong-Light-Bold`` and silently fall back to
+# Helvetica (which would re-introduce tofu for any bolded Chinese span).
 _CJK_FONT_REGISTERED = False
 
 
@@ -98,6 +110,16 @@ def _ensure_cjk_font() -> str:
         return "STSong-Light"
     try:
         pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        # Map bold / italic / bold-italic onto the same regular face so that
+        # <b> and <i> spans inside Paragraph content don't silently fall
+        # back to Helvetica-Bold (which has no CJK glyphs).
+        registerFontFamily(
+            "STSong-Light",
+            normal="STSong-Light",
+            bold="STSong-Light",
+            italic="STSong-Light",
+            boldItalic="STSong-Light",
+        )
         _CJK_FONT_REGISTERED = True
         return "STSong-Light"
     except Exception as exc:
@@ -197,37 +219,60 @@ def audit_result_to_pdf_dict(
 
 
 def _make_styles():
-    """Return the dict of ParagraphStyles used throughout the PDF."""
+    """Return the dict of ParagraphStyles used throughout the PDF.
+
+    ALL content styles (``h1`` / ``h2`` / ``section`` / ``body`` / ``code`` /
+    ``meta``) use the CJK font so Chinese fix fields render correctly.
+    ASCII English text still renders fine through the CJK font (just in a
+    serif Chinese style). Tofu in fix titles / code comments / how-to-fix
+    paragraphs was the symptom we're fixing here.
+
+    Trade-off accepted: ``code`` is no longer monospace. Most readers care
+    more about the code being readable in Chinese (e.g. JSON-LD with
+    Chinese placeholder labels, code comments in Chinese) than about
+    column-perfect alignment. Pure-English code still parses fine.
+
+    The cover-page styles that ONLY render English literals (e.g. brand
+    italic footer line) still use the default Helvetica family — they
+    never contain Chinese so there's no tofu risk.
+    """
     base = getSampleStyleSheet()
+    cjk = _ensure_cjk_font()
     return {
         "base":      base,
         "score_big": ParagraphStyle(
             "ScoreBig", parent=base["Normal"],
             fontSize=72, leading=80, alignment=1,
             textColor=HexColor("#0F172A"), spaceAfter=12,
+            fontName=cjk,
         ),
         "h1":        ParagraphStyle(
             "H1", parent=base["Heading1"],
             fontSize=24, leading=28, spaceAfter=14,
             textColor=_PRIMARY,
+            fontName=cjk,
         ),
         "h2":        ParagraphStyle(
             "H2", parent=base["Heading2"],
             fontSize=18, leading=22, spaceAfter=10,
+            fontName=cjk,
         ),
         "section":   ParagraphStyle(
             "Section", parent=base["Heading3"],
             fontSize=14, leading=18, spaceBefore=0, spaceAfter=0,
             textColor=_PRIMARY,
+            fontName=cjk,
         ),
         "body":      ParagraphStyle(
             "Body", parent=base["BodyText"],
             fontSize=11, leading=15, spaceAfter=6,
+            fontName=cjk,
         ),
+        # English-only footer line — keep Helvetica italic for visual contrast.
         "italic":    base["Italic"],
         "code":      ParagraphStyle(
             "Code", parent=base["Code"],
-            fontSize=9, leading=12, fontName="Courier",
+            fontSize=9, leading=12, fontName=cjk,
             textColor=HexColor("#111827"),
             leftIndent=0, rightIndent=0,
             spaceBefore=0, spaceAfter=0,
@@ -235,15 +280,16 @@ def _make_styles():
         "meta":      ParagraphStyle(
             "Meta", parent=base["Normal"],
             fontSize=10, leading=13, textColor=HexColor("#4B5563"),
+            fontName=cjk,
         ),
-        # CJK-capable body style — used for ``where_to_apply`` paragraphs
-        # which contain Chinese. STSong-Light has both ASCII and CJK ranges,
-        # so mixed-language lines (e.g. "**Shopify:** 后台 → 产品") render
-        # cleanly with a single style.
+        # Back-compat alias — ``body_cjk`` is now identical to ``body``.
+        # Kept so existing callers (`_build_dimension_page`) keep working
+        # without touching every reference site; future code can use
+        # ``body`` directly.
         "body_cjk":  ParagraphStyle(
             "BodyCJK", parent=base["BodyText"],
             fontSize=11, leading=15, spaceAfter=6,
-            fontName=_ensure_cjk_font(),
+            fontName=cjk,
         ),
     }
 

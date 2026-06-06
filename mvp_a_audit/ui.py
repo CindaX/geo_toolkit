@@ -551,36 +551,6 @@ def _render_post_payment() -> None:
         st.success("✅ Payment successful — your detailed audit PDF is ready below.")
     st.markdown("---")
 
-    # 🐛 TEMPORARY DEBUG — verifies whether session_state survives the Stripe
-    # redirect on Streamlit Cloud. Remove after we confirm the root cause.
-    with st.expander("🐛 Debug info (temporary)", expanded=True):
-        st.write("**session_state contents:**")
-        keys = list(st.session_state.keys())
-        st.write(f"Total keys: {len(keys)}")
-        st.write(f"Keys: {keys}")
-
-        audit_results_dbg = st.session_state.get("audit_results")
-        st.write(f"audit_results is None: {audit_results_dbg is None}")
-        st.write(f"audit_results type: {type(audit_results_dbg).__name__}")
-        if audit_results_dbg:
-            if isinstance(audit_results_dbg, dict):
-                st.write(f"audit_results dict keys: {list(audit_results_dbg.keys())[:10]}")
-            else:
-                st.write(f"audit_results value preview: {str(audit_results_dbg)[:200]}")
-
-        # Probe both un-prefixed (user spec) and audit_-prefixed (actual) names,
-        # so we can spot a naming mismatch as well as a session-loss case.
-        for key in [
-            "brand_name", "url", "industry",
-            "audit_brand_name", "audit_url", "audit_industry", "audit_step",
-            "geo_shared_brand_name", "geo_shared_url", "geo_shared_industry",
-            "geo_shared_email", "geo_shared_email_captured",
-        ]:
-            val = st.session_state.get(key, "<missing>")
-            st.write(f"`{key}`: {val}")
-
-        st.write(f"**Query params:** {dict(st.query_params)}")
-
     audit_results = st.session_state.get("audit_results") or {}
     brand_name = st.session_state.get("audit_brand_name", "") or ""
     url = st.session_state.get("audit_url", "") or ""

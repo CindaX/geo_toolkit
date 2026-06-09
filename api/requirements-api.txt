@@ -1,0 +1,15 @@
+# Minimal runtime deps for the GEO audit HTTP API (api/main.py).
+# Deliberately EXCLUDES streamlit / stripe / supabase / reportlab / pandas —
+# none are on the run_audit() code path.
+
+# ── Web framework ─────────────────────────────────────────────────────
+fastapi>=0.110.0           # ASGI app + request validation
+uvicorn>=0.29.0            # ASGI server to run the app
+pydantic>=2.0.0            # request body model (bundled with fastapi, pinned for clarity)
+
+# ── run_audit() dependency chain ──────────────────────────────────────
+httpx>=0.27.0              # shared/crawler.py HTTP client (WAF fallback + Jina Reader)
+beautifulsoup4>=4.12.0     # HTML extraction in crawler + analyzers
+lxml>=5.0.0                # BeautifulSoup "lxml" parser backend
+openai>=1.30.0             # LLM calls via OpenRouter (shared/claude_client.py)
+python-dotenv>=1.0.0       # .env fallback for OPENROUTER_API_KEY when not on Streamlit Cloud

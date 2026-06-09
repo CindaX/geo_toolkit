@@ -1,0 +1,36 @@
+# Render Blueprint for the GEO audit FastAPI service (api/main.py).
+#
+# This deploys ONLY the API. The Streamlit app (root requirements.txt) is NOT
+# touched by this blueprint — it stays on Streamlit Cloud as-is.
+#
+# Key points:
+#   - buildCommand installs the slim API deps (api/requirements-api.txt),
+#     NOT the root requirements.txt (which pulls streamlit/stripe/supabase/…).
+#   - startCommand binds uvicorn to 0.0.0.0 and Render's injected $PORT.
+#   - All secrets use `sync: false` → Render will NOT read a value from this
+#     file; you set each value in the Render dashboard. No real keys live here.
+
+services:
+  - type: web
+    name: geo-audit-api
+    runtime: python
+    plan: free                 # free tier spins down when idle; see risks below
+    healthCheckPath: /health
+    buildCommand: pip install -r api/requirements-api.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # --- LLM access (required) — fill in the Render dashboard ---
+      - key: OPENROUTER_API_KEY
+        sync: false
+      # --- API access key (required) — your own gate for the endpoint ---
+      - key: GEO_API_KEY
+        sync: false
+      # --- Protection tuning (optional; code has sane defaults if unset) ---
+      - key: DAILY_COST_LIMIT_USD
+        sync: false
+      - key: RATE_LIMIT_PER_MINUTE
+        sync: false
+      - key: RATE_LIMIT_PER_DAY
+        sync: false
+      - key: CACHE_TTL_HOURS
+        sync: false

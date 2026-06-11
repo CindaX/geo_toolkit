@@ -16,6 +16,16 @@ WEIGHT = 0.12
 
 _CORE_TYPES = {"Organization", "Product", "FAQPage", "BreadcrumbList"}
 _TIMEOUT = 15
+# Minimal browser headers for the fallback fetch (avoids the bare-httpx UA that
+# WAFs 403). The orchestrator normally passes homepage_html so this rarely runs.
+_BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 _JSONLD_RE = re.compile(
     r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
     re.DOTALL | re.IGNORECASE,
@@ -23,13 +33,25 @@ _JSONLD_RE = re.compile(
 
 
 def analyze(url: str, **_kwargs) -> dict:
-    try:
-        resp = httpx.get(url, timeout=_TIMEOUT, follow_redirects=True)
-        resp.raise_for_status()
-    except Exception as exc:
-        return _result(0, f"Could not fetch homepage: {exc}", [], [])
+    # Reuse the HTML already fetched by the central crawler (which uses full
+    # browser headers). Only fetch directly if it wasn't provided.
+    html = _kwargs.get("homepage_html") or ""
+    if not html:
+        try:
+            resp = httpx.get(
+                url,
+                timeout=_TIMEOUT,
+                follow_redirects=True,
+                headers=_BROWSER_HEADERS,
+            )
+            resp.raise_for_status()
+            html = resp.text
+        except Exception as exc:
+            # Could not access the page → unknown, not "no schema". Score None
+            # (not 0) so it's excluded from the weighted average rather than
+            # dragging it down as if schema were genuinely absent.
+            return _result(None, f"Could not fetch homepage: {exc}", [], [])
 
-    html = resp.text
     raw_blocks = _JSONLD_RE.findall(html)
 
     all_types: list[str] = []
@@ -80,7 +102,7 @@ def _collect_types(obj: object) -> list[str]:
 
 
 def _result(
-    score: int,
+    score: int | None,
     description: str,
     found_core: list[str],
     all_types: list[str],

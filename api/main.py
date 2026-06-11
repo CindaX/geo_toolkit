@@ -84,6 +84,13 @@ def audit(req: AuditRequest, x_api_key: str | None = Header(default=None)) -> di
 
     # 4. Run the audit, then record cost + cache the result.
     result = run_audit(req.url, brand_name=req.brand_name, industry=req.industry)
+
+    # A failed audit (e.g. homepage unreachable / blocked) ran no LLM call and
+    # cost nothing — do NOT record cost and do NOT cache it (caching would pin
+    # the failure for the TTL and block a later successful retry).
+    if result.get("status") == "failed":
+        return {**result, "cached": False}
+
     protections.record_cost(result.get("estimated_cost_usd", 0.0))
     protections.cache_set(cache_key, result)
     return {**result, "cached": False}

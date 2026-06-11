@@ -41,6 +41,17 @@ _GRADES = [
     (0,  "🆘 Critical"),
 ]
 
+# Minimum homepage text length (chars) for the audit to be considered viable.
+# Below this we treat the site as unreachable/blocked (403, timeout, empty body,
+# or a JS-challenge interstitial) and refuse to produce a report.
+_MIN_HOMEPAGE_CHARS = 200
+
+# Plain-language (Chinese) message shown to merchants when the site can't be read.
+_UNREACHABLE_MESSAGE = (
+    "我们暂时无法访问这个网站,可能它开启了反爬虫保护,或者网址当前打不开。"
+    "请确认网址填写正确、网站能在浏览器里正常打开,然后再试一次。"
+)
+
 # ── Analyzer registry ─────────────────────────────────────────────────────────
 # Ordered list of (dimension_key, module) used by both the programmatic API
 # and the Streamlit app's progress loop.
@@ -109,6 +120,15 @@ def run_audit(
     reset_usage_stats()
 
     inputs = prepare_inputs(url, brand_name, industry)
+
+    # Fail fast if the homepage couldn't be fetched or came back near-empty
+    # (403 / timeout / empty body / JS-challenge page). Without real homepage
+    # content the report would be built from a fraction of the signals, so we
+    # refuse to produce a misleading score — and we skip every analyzer plus the
+    # paid LLM call, so a blocked site costs $0.
+    if len((inputs.get("homepage_text") or "").strip()) < _MIN_HOMEPAGE_CHARS:
+        return _unreachable_result(url, brand_name, industry)
+
     results: dict[str, dict] = {}
 
     futures_map: dict = {}
@@ -133,18 +153,26 @@ def run_audit(
 # ── Score computation ─────────────────────────────────────────────────────────
 
 def compute_geo_score(results: dict[str, dict]) -> float | None:
-    """Weighted average of non-null scores, re-normalized over available weight."""
+    """Weighted average of non-null scores, re-normalized over available weight.
+
+    Returns None (→ "⚠️ Incomplete") when more than half of the total dimension
+    weight is missing. Otherwise a handful of independent dimensions could be
+    renormalized into a confident-looking score while most of the report is
+    blank — which is exactly how a blocked homepage produced a bogus 23.5.
+    """
     total_weight = 0.0
+    available_weight = 0.0
     weighted_sum = 0.0
     for key, result in results.items():
-        score = result.get("score")
         weight = _WEIGHTS.get(key, 0.0)
+        total_weight += weight
+        score = result.get("score")
         if score is not None:
             weighted_sum += float(score) * weight
-            total_weight += weight
-    if total_weight == 0:
+            available_weight += weight
+    if total_weight == 0 or available_weight < 0.5 * total_weight:
         return None
-    return round(weighted_sum / total_weight, 1)
+    return round(weighted_sum / available_weight, 1)
 
 
 def get_grade(score: float | None) -> str:
@@ -304,6 +332,7 @@ def _build_audit_result(
     geo_score = compute_geo_score(results)
     bc_details = results.get("brand_clarity", {}).get("details", {})
     return {
+        "status": "ok",
         "url": url,
         "brand_name": brand_name,
         "industry": industry,
@@ -313,6 +342,25 @@ def _build_audit_result(
         "results": results,
         "usage": get_usage_stats(),
         "estimated_cost_usd": estimate_cost(),
+    }
+
+
+def _unreachable_result(url: str, brand_name: str, industry: str) -> dict:
+    """Structured failure returned when the homepage can't be read. No analyzers
+    ran and no LLM call was made, so estimated_cost_usd is 0."""
+    return {
+        "status": "failed",
+        "reason": "homepage_unreachable",
+        "message": _UNREACHABLE_MESSAGE,
+        "url": url,
+        "brand_name": brand_name,
+        "industry": industry,
+        "geo_score": None,
+        "geo_grade": get_grade(None),
+        "ai_understanding": None,
+        "results": {},
+        "usage": get_usage_stats(),
+        "estimated_cost_usd": 0.0,
     }
 
 

@@ -294,7 +294,18 @@ def _merge_fixes_into_results(
         )
         result["fix"] = static_fix  # may be None if dim_key is LLM-handled
 
-    # Phase 2: LLM fixes for the 5 dimensions that don't have a static template
+    # Phase 2: LLM fixes for the 5 dimensions that don't have a static template.
+    # Cost gate: if the audit itself is not trustworthy (more than half the
+    # dimension weight missing → compute_geo_score returns None), recommendations
+    # would be generated from garbage AND charge the one big LLM call (~$0.09).
+    # This guards BOTH callers (run_audit and the Streamlit loop), including the
+    # case where a WAF challenge page slipped past the crawler heuristics.
+    if compute_geo_score(results) is None:
+        logger.warning(
+            "Skipping recommendations LLM call: audit incomplete (most dimensions unscored)."
+        )
+        return
+
     try:
         llm_fixes = generate_recommendations(results, brand_name, url, industry, language=language)
     except Exception as exc:

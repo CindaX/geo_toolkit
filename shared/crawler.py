@@ -69,6 +69,43 @@ _BROWSER_HEADERS: dict[str, str] = {
 _JINA_BASE_URL: str = "https://r.jina.ai/"
 _JINA_TIMEOUT: float = 20.0
 
+# Signatures of WAF JS-challenge/interstitial pages (Cloudflare, DataDome,
+# PerimeterX, Akamai, generic captcha walls). These come back as HTTP 200 with
+# plenty of text, so a status check alone lets them through — and downstream
+# the challenge copy masquerades as homepage content (this is exactly how
+# kobo.com on a datacenter IP slipped past the <200-chars fail-fast).
+_BLOCKED_SIGNATURES: tuple[str, ...] = (
+    "just a moment",
+    "checking your browser",
+    "cf-chl",
+    "cf-browser-verification",
+    "challenge-platform",
+    "/cdn-cgi/challenge",
+    "enable javascript and cookies to continue",
+    "verify you are a human",
+    "are you a robot",
+    "datadome",
+    "captcha-delivery.com",
+    "_px-captcha",
+    "perimeterx",
+    "akamai bot manager",
+    "request unsuccessful. incapsula",
+    "attention required! | cloudflare",
+)
+# Challenge interstitials are small (kobo's WAF pages measure ~84KB); real
+# store homepages run to megabytes (kobo's is ~1.5MB). Only sniff small bodies
+# so a large legitimate page that merely *mentions* e.g. "DataDome" in a blog
+# post is never misclassified.
+_BLOCKED_SNIFF_MAX_BYTES: int = 150_000
+
+
+def _looks_blocked(html: str) -> bool:
+    """True if *html* looks like a WAF challenge page rather than real content."""
+    if not html or len(html) > _BLOCKED_SNIFF_MAX_BYTES:
+        return False
+    lowered = html.lower()
+    return any(sig in lowered for sig in _BLOCKED_SIGNATURES)
+
 # URL path patterns we use to classify candidate links.
 _ABOUT_PATTERN = re.compile(r"/(about|company|who-we-are|team)(/|$)", re.I)
 _PRODUCT_PATTERN = re.compile(
@@ -374,6 +411,12 @@ def _fetch(client: httpx.Client, url: str) -> str | None:
             ctype = resp.headers.get("content-type", "")
             if "html" not in ctype.lower() and ctype:
                 return None
+            # WAFs may serve a 200 JS-challenge page instead of a 403. Treat
+            # it as a failed attempt (maybe another UA passes); if every
+            # attempt is blocked we return None like any other fetch failure.
+            if _looks_blocked(resp.text):
+                print(f"[FETCH] {url} attempt {i}/3 ua={label} → 200 but WAF challenge page", flush=True)
+                continue
             return resp.text
         except (httpx.HTTPError, ValueError) as exc:
             print(f"[FETCH] {url} attempt {i}/3 ua={label} → EXC {type(exc).__name__}", flush=True)

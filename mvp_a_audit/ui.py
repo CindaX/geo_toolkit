@@ -33,6 +33,8 @@ from shared.ui_components import render_footer
 
 from mvp_a_audit.logic import (
     ANALYZERS,
+    _MIN_HOMEPAGE_CHARS,
+    _UNREACHABLE_MESSAGE,
     _WEIGHTS,
     _build_audit_result,
     _failed_result,
@@ -290,6 +292,17 @@ def _render_audit_scanning() -> None:
             st.rerun()
         return
 
+    # Same fail-fast as run_audit(): homepage missing/near-empty (403, timeout,
+    # empty body, or a WAF challenge page) → stop before any analyzer or LLM
+    # call runs. Without this the Streamlit path produced a broken report and
+    # still paid for the recommendations call.
+    if len((inputs.get("homepage_text") or "").strip()) < _MIN_HOMEPAGE_CHARS:
+        st.error(_UNREACHABLE_MESSAGE)
+        if st.button("← Try Again", key="audit_btn_unreachable_retry"):
+            st.session_state.audit_step = "input"
+            st.rerun()
+        return
+
     audit_results: dict[str, dict] = {}
     errors: dict[str, str] = {}
     total = len(ANALYZERS)
@@ -327,6 +340,16 @@ def _render_audit_scanning() -> None:
     _merge_fixes_into_results(audit_results, brand_name, url, industry, language=language)
 
     final = _build_audit_result(url, brand_name, industry, audit_results)
+
+    # Most dimensions unscored → geo_score is None ("Incomplete"). Showing the
+    # partial report would mislead; surface the plain-language message instead.
+    if final["geo_score"] is None:
+        st.error(_UNREACHABLE_MESSAGE)
+        if st.button("← Try Again", key="audit_btn_incomplete_retry"):
+            st.session_state.audit_step = "input"
+            st.rerun()
+        return
+
     st.session_state.audit_results = final["results"]
     st.session_state.audit_geo_score = final["geo_score"]
     st.session_state.audit_geo_grade = final["geo_grade"]

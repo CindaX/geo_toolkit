@@ -161,6 +161,30 @@ def simulate_answers(
     return ask_claude_json(prompt, max_tokens=6000)
 
 
+def content_advice(
+    brand_name: str,
+    industry: str,
+    prompts: list[dict],
+) -> list[dict]:
+    """For every prompt, generate plain-language "how to answer this on your store"
+    advice for a non-technical merchant. One LLM call, returns a list aligned to
+    the prompts by ``id``.
+    """
+    tmpl = (_PROMPT_DIR / "04_content_advice.txt").read_text(encoding="utf-8")
+    prompts_for_claude = [
+        {"id": p.get("id"), "type": p.get("type"), "text": p.get("text", "")}
+        for p in prompts
+    ]
+    prompt = (
+        tmpl
+        .replace("{brand_name}", brand_name)
+        .replace("{industry}", industry)
+        .replace("{prompts_json}", json.dumps(prompts_for_claude, ensure_ascii=False, indent=2))
+    )
+    data = ask_claude_json(prompt, max_tokens=6000)
+    return data.get("advice", []) or []
+
+
 def find_opportunities(
     brand_name: str,
     industry: str,

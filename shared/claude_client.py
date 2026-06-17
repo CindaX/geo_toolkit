@@ -26,6 +26,7 @@ from shared.config import (
     CLAUDE_PREMIUM,
     CLAUDE_SONNET,
     DEFAULT_MODEL,
+    PERPLEXITY_SONAR,
     PREMIUM_MODEL,
 )
 
@@ -299,6 +300,44 @@ def ask_claude_json(
         return _parse_json_loose(text)
     except (ValueError, json.JSONDecodeError):
         return {"error": "Claude did not return valid JSON", "raw": text}
+
+
+def ask_perplexity(
+    prompt: str,
+    *,
+    system: str | None = None,
+    model: str | None = None,
+    max_tokens: int = 1024,
+) -> str:
+    """Ask Perplexity Sonar (web-grounded search) a question; return its text answer.
+
+    Routed through OpenRouter like Claude, reusing the same retry/timeout/usage
+    machinery. Used for the one-time competitor snapshot: we ask "who would you
+    recommend for X" and later extract the cited brands with a cheap Claude call.
+
+    Note: Sonar adds a per-request web-search fee that is NOT reflected in token
+    usage, so the cost accounting here is approximate — callers MUST hard-cap the
+    number of snapshot questions (we cap at 8) rather than rely on token counts.
+
+    Args:
+        prompt: The shopping question to ask, as a real user would type it.
+        system: Optional system prompt.
+        model: OpenRouter model id; ``None`` (default) uses
+            :data:`PERPLEXITY_SONAR` (the cheap tier).
+        max_tokens: Max tokens to generate (answers are short, default 1024).
+
+    Returns:
+        The assistant's text answer, stripped.
+
+    Raises:
+        ClaudeError: If the call fails after all retries.
+    """
+    resolved = model or PERPLEXITY_SONAR
+    text, usage = _call_with_retry(
+        prompt=prompt, system=system, model=resolved, max_tokens=max_tokens
+    )
+    _record_usage(usage)
+    return text
 
 
 def get_usage_stats() -> dict[str, int]:

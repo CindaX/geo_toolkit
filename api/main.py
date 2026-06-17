@@ -30,6 +30,7 @@ from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from mvp_a_audit.logic import run_audit
+from mvp_b_prompt.discover import run_prompt_discovery, suggest_context
 
 from api import protections
 
@@ -40,6 +41,18 @@ class AuditRequest(BaseModel):
     url: str
     brand_name: str = "Brand"
     industry: str = "General"
+
+
+class PromptRunRequest(BaseModel):
+    brand_name: str
+    industry: str = "General"
+    competitors: list[str] = []
+    perspective: str = "B2C consumer"
+
+
+class SuggestContextRequest(BaseModel):
+    shop_name: str = ""
+    product_types: list[str] = []
 
 
 def _require_api_key(x_api_key: str | None) -> str:
@@ -94,3 +107,56 @@ def audit(req: AuditRequest, x_api_key: str | None = Header(default=None)) -> di
     protections.record_cost(result.get("estimated_cost_usd", 0.0))
     protections.cache_set(cache_key, result)
     return {**result, "cached": False}
+
+
+@app.post("/prompt-run")
+def prompt_run(req: PromptRunRequest, x_api_key: str | None = Header(default=None)) -> dict:
+    """Run the wave-1 prompt-discovery + real competitor snapshot pipeline.
+
+    Same protection order as /audit: auth → rate limit → cache → cost breaker.
+    Cost is additionally bounded by the hard 8-question snapshot cap inside the
+    pipeline. Cached by (brand, industry, competitors, perspective) so a retry
+    after the merchant's purchase doesn't re-bill the LLM/search spend.
+    """
+    api_key = _require_api_key(x_api_key)
+
+    allowed, reason = protections.rate_limit_check(api_key)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {reason}")
+
+    cache_key = "promptrun::" + "|".join(
+        [
+            req.brand_name.strip().lower(),
+            req.industry.strip().lower(),
+            ",".join(sorted(c.strip().lower() for c in req.competitors)),
+            req.perspective.strip().lower(),
+        ]
+    )
+    cached = protections.cache_get(cache_key)
+    if cached is not None:
+        return {**cached, "cached": True}
+
+    if protections.cost_budget_exceeded():
+        raise HTTPException(status_code=429, detail="Daily spend limit reached")
+
+    result = run_prompt_discovery(
+        req.brand_name, req.industry, req.competitors, req.perspective
+    )
+    protections.record_cost(result.get("estimated_cost_usd", 0.0))
+    protections.cache_set(cache_key, result)
+    return {**result, "cached": False}
+
+
+@app.post("/suggest-context")
+def suggest_context_route(
+    req: SuggestContextRequest, x_api_key: str | None = Header(default=None)
+) -> dict:
+    """Cheap (Haiku) pre-fill helper: shop name + product types → suggested
+    industry + 2-3 competitor brands. Auth + rate limit only (no cost breaker —
+    a single small call). The Shopify app calls this once per shop and caches it.
+    """
+    api_key = _require_api_key(x_api_key)
+    allowed, reason = protections.rate_limit_check(api_key)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {reason}")
+    return suggest_context(req.shop_name, req.product_types)

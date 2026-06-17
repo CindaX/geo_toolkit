@@ -35,7 +35,11 @@ CLAUDE_OPUS: str = CLAUDE_PREMIUM
 OPENAI_GPT4O_MINI: str = "openai/gpt-4o-mini"
 
 # Perplexity online (via OpenRouter) — built-in real-time web search.
-PERPLEXITY_SONAR_ONLINE: str = "perplexity/llama-3.1-sonar-small-128k-online"
+# Current cheap tier is `perplexity/sonar` (the older llama-3.1-sonar-* ids were
+# retired by OpenRouter in 2025). Used for the one-time competitor snapshot.
+PERPLEXITY_SONAR: str = "perplexity/sonar"
+# Back-compat alias for any older import.
+PERPLEXITY_SONAR_ONLINE: str = PERPLEXITY_SONAR
 
 # --- Semantic tier aliases -----------------------------------------------
 

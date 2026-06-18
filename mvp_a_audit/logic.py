@@ -52,6 +52,36 @@ _UNREACHABLE_MESSAGE = (
     "请确认网址填写正确、网站能在浏览器里正常打开,然后再试一次。"
 )
 
+# Message for a password-protected / "Opening soon" Shopify storefront — the page
+# loads fine (so the length check passes) but contains no real, public content.
+_PASSWORD_MESSAGE = (
+    "这个店面开启了密码保护(或处于「即将开业」状态),AI 助手和我们都无法访问它的公开页面,"
+    "所以无法给出真实的 GEO 评分。请在 Shopify 后台 Online Store → Preferences 关闭密码保护后再扫描。"
+)
+
+# Markers that identify a Shopify password / "Opening soon" page. These are
+# specific to that page (the password-template body class and the password form
+# action), so they don't false-positive on a normal storefront that merely
+# mentions the word "password". This is the same class of problem as a WAF
+# challenge page slipping past a length check — the body is long enough to look
+# real, so we must fingerprint it, not just measure it.
+_PASSWORD_MARKERS = (
+    "template-password",            # <body class="... template-password ...">
+    'action="/password"',          # the storefront password form
+    "action='/password'",
+    "enter store using password",
+    "enter using password",
+    "store is password protected",
+)
+
+
+def _looks_password_protected(html: str) -> bool:
+    """True if the fetched HTML is a Shopify password / Opening-soon gate page."""
+    if not html:
+        return False
+    low = html.lower()
+    return any(marker in low for marker in _PASSWORD_MARKERS)
+
 # ── Analyzer registry ─────────────────────────────────────────────────────────
 # Ordered list of (dimension_key, module) used by both the programmatic API
 # and the Streamlit app's progress loop.
@@ -120,6 +150,15 @@ def run_audit(
     reset_usage_stats()
 
     inputs = prepare_inputs(url, brand_name, industry)
+
+    # A password-protected / "Opening soon" Shopify storefront returns a real,
+    # long page (so the length check below passes) but no public content — scoring
+    # it would produce a meaningless "fake" GEO grade. Fingerprint and refuse it.
+    if _looks_password_protected(inputs.get("homepage_html") or ""):
+        return _unreachable_result(
+            url, brand_name, industry,
+            reason="password_protected", message=_PASSWORD_MESSAGE,
+        )
 
     # Fail fast if the homepage couldn't be fetched or came back near-empty
     # (403 / timeout / empty body / JS-challenge page). Without real homepage
@@ -356,13 +395,21 @@ def _build_audit_result(
     }
 
 
-def _unreachable_result(url: str, brand_name: str, industry: str) -> dict:
-    """Structured failure returned when the homepage can't be read. No analyzers
-    ran and no LLM call was made, so estimated_cost_usd is 0."""
+def _unreachable_result(
+    url: str,
+    brand_name: str,
+    industry: str,
+    *,
+    reason: str = "homepage_unreachable",
+    message: str = _UNREACHABLE_MESSAGE,
+) -> dict:
+    """Structured failure returned when the homepage can't be read (or is gated
+    behind a password page). No analyzers ran and no LLM call was made, so
+    estimated_cost_usd is 0."""
     return {
         "status": "failed",
-        "reason": "homepage_unreachable",
-        "message": _UNREACHABLE_MESSAGE,
+        "reason": reason,
+        "message": message,
         "url": url,
         "brand_name": brand_name,
         "industry": industry,

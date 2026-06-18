@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from shared.claude_client import ask_claude_json, ask_perplexity
 
@@ -117,15 +118,31 @@ def run_snapshot(
 ) -> list[dict]:
     """Snapshot the top-``limit`` recommendation/comparison prompts via live search.
 
-    Each call is one Sonar search + one Haiku extraction. Returns a list whose
-    rows are directly consumable by find_opportunities(). A single prompt that
-    errors is skipped (logged) rather than failing the whole snapshot.
+    Each call is one Sonar search + one Haiku extraction. The chains run
+    CONCURRENTLY in a threadpool — serial execution of ~8 live searches could
+    exceed the caller's request timeout on a cold start. Returns a list whose
+    rows are directly consumable by find_opportunities() (re-sorted to the input
+    order). A single prompt that errors is skipped (logged) rather than failing
+    the whole snapshot.
     """
     picked = select_snapshot_prompts(prompts, limit)
+    if not picked:
+        return []
+
     results: list[dict] = []
-    for p in picked:
-        try:
-            results.append(snapshot_one(p, brand_name, competitors))
-        except Exception as exc:  # noqa: BLE001 — one bad prompt shouldn't kill the run
-            logger.warning("snapshot failed for prompt id=%s: %s", p.get("id"), exc)
+    # I/O-bound (network) work → threads give real concurrency despite the GIL.
+    with ThreadPoolExecutor(max_workers=min(8, len(picked))) as pool:
+        futures = {
+            pool.submit(snapshot_one, p, brand_name, competitors): p for p in picked
+        }
+        for fut in as_completed(futures):
+            p = futures[fut]
+            try:
+                results.append(fut.result())
+            except Exception as exc:  # noqa: BLE001 — one bad prompt shouldn't kill the run
+                logger.warning("snapshot failed for prompt id=%s: %s", p.get("id"), exc)
+
+    # as_completed yields out of order; restore the original prompt order.
+    order = {p.get("id"): i for i, p in enumerate(picked)}
+    results.sort(key=lambda r: order.get(r.get("id"), len(picked)))
     return results

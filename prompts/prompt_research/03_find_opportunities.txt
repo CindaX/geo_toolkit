@@ -39,6 +39,8 @@ For each opportunity, return:
 
 Avoid vague actions like "improve SEO", "publish more content", or "build authority".
 
+The current year is {year}. If a suggested page title or action includes a year, it MUST be {year} — never an earlier year.
+
 ## OUTPUT FORMAT
 
 Return a JSON object with exactly these fields:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 from shared.claude_client import (
@@ -125,6 +126,12 @@ def run_analysis(
 
 # ── LLM call wrappers ────────────────────────────────────────────────────────
 
+def _current_year() -> str:
+    """Current UTC year as a string, injected into prompts so generated titles/
+    queries use the present year instead of the model's stale default."""
+    return str(datetime.now(timezone.utc).year)
+
+
 def generate_prompts(
     brand_name: str,
     industry: str,
@@ -138,6 +145,7 @@ def generate_prompts(
         .replace("{industry}", industry)
         .replace("{perspective}", perspective)
         .replace("{competitors_list}", ", ".join(competitors) if competitors else "(none provided)")
+        .replace("{year}", _current_year())
     )
     data = ask_claude_json(prompt)
     if "prompts" in data and len(data["prompts"]) != _TOTAL_PROMPTS:
@@ -180,6 +188,7 @@ def content_advice(
         .replace("{brand_name}", brand_name)
         .replace("{industry}", industry)
         .replace("{prompts_json}", json.dumps(prompts_for_claude, ensure_ascii=False, indent=2))
+        .replace("{year}", _current_year())
     )
     data = ask_claude_json(prompt, max_tokens=6000)
     return data.get("advice", []) or []
@@ -212,6 +221,7 @@ def find_opportunities(
         .replace("{brand_name}", brand_name)
         .replace("{industry}", industry)
         .replace("{simulation_json}", json.dumps(sim_for_claude, ensure_ascii=False, indent=2))
+        .replace("{year}", _current_year())
     )
     data = ask_claude_json(prompt, max_tokens=4000)
     return data.get("opportunities", []) or []

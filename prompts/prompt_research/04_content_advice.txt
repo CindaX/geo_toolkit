@@ -15,6 +15,8 @@ For EVERY question, give the merchant one concrete, do-it-this-week piece of adv
 
 Write for a NON-TECHNICAL store owner. No jargon, no "improve your SEO". Tell them what to actually publish and where.
 
+The current year is {year}. If a suggested page title, guide, or query includes a year, it MUST be {year} — never an earlier year.
+
 For each question return:
 - `id`: the integer id of the question
 - `content_type`: the single best format to answer it. One of: "FAQ", "comparison page", "product description", "blog post", "buying guide", "spec table", "about/brand page"

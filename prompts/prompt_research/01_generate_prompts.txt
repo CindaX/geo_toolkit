@@ -30,19 +30,20 @@ Generate EXACTLY 20 prompts that real users in the "{perspective}" segment would
 
 5. **buying_stage** (4 prompts) — decision / value questions
    - MAY include {brand_name} (mix branded and generic; e.g. 2 of each)
-   - Examples: "is Bambu Lab worth the money" · "should I buy a 3D printer in 2025"
+   - Examples: "is Bambu Lab worth the money" · "should I buy a 3D printer in {year}"
 
 ## QUALITY-CONTROL PROMPT (REQUIRED)
 
 At least ONE of the 4 "recommendation" prompts MUST be a maximally generic brand-discovery query that specifies NO price, NO feature, NO use case — only the broadest category.
 
 Pattern: "best <category> brand <year>" or "top <category> brands"
-Example: "best 3D printer brand in 2025"
+Example: "best 3D printer brand in {year}"
 
 This serves as a benchmark: if a brand can't even appear in the answer to this prompt, it has weak general AI recognition.
 
 ## CONSTRAINTS
 
+- The current year is {year}. Any year you mention MUST be {year} — never an earlier year.
 - Each prompt MUST be ≤15 words
 - Each prompt MUST sound like real user typing — lowercase except proper nouns
 - DO NOT use formal phrasings like "Could you tell me..." or "What are the best..."

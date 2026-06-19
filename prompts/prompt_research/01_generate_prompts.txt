@@ -5,6 +5,14 @@ Industry: {industry}
 User perspective: {perspective}
 Likely competitors (for comparison-type prompts): {competitors_list}
 
+## CATEGORY ANCHOR (CRITICAL — read this first)
+
+The category is "{industry}". {brand_name} competes specifically in this category, and EVERY one of the 20 prompts MUST stay inside it. Do not drift into a broader or adjacent category.
+
+Some listed competitors may be large companies that span many product categories. Interpret each competitor ONLY as its product line WITHIN "{industry}" — never as the whole company. Example: if the category is "e-ink handwriting tablets" and a listed competitor is a broad electronics company, treat it as that company's e-ink tablet products only, NOT its phones, speakers, or overall brand.
+
+FORBIDDEN: any prompt about a broader or different category than "{industry}". If you are about to write something like "best consumer electronics brand" or a prompt naming products from an unrelated category (smart speakers, TVs, phones, etc.) when the category is e-ink tablets, that is off-track — rewrite it to stay inside "{industry}". Brands appearing in the prompts should be ones that actually make "{industry}" products.
+
 ## TASK
 
 Generate EXACTLY 20 prompts that real users in the "{perspective}" segment would type into an AI assistant (ChatGPT, Claude, Perplexity) when researching products in the "{industry}" category.

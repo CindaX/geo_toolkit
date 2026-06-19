@@ -40,10 +40,39 @@ The assistant answered:
 {answer}
 \"\"\"
 
-List the specific product or company BRANDS the answer recommends or names, ordered by prominence (most strongly recommended first). For each brand give a one-line reason the answer gave for it (or "" if none). Ignore generic words, categories, and features that are not brand names.
+List the specific product or company BRANDS the answer recommends or names, ordered by prominence (most strongly recommended first). For each brand give a one-line reason the answer gave for it (or "" if none).
+
+ONLY include real product or company brands that actually MAKE products in this category. EXCLUDE:
+- app stores and software platforms (Google Play, Play Store, App Store)
+- operating systems (Android, iOS, iPadOS, Windows, macOS)
+- generic marketplaces or retailers mentioned only as WHERE to buy, not as the maker
+- generic words, categories, features, and store names
+A brand only mentioned as a compatibility note (e.g. "supports Google Play") is NOT a competing brand — leave it out.
 
 Return JSON of this exact shape (at most 6 brands):
 {"brands": [{"brand": "<name>", "reason": "<one line>"}]}"""
+
+# Backstop denylist for non-brand entities that occasionally slip through as a
+# "brand" (platforms, app stores, OSes). Matched case-insensitively on the exact
+# name. Deliberately NARROW: we do NOT list Amazon / Apple / Samsung / Google,
+# which can be genuine product makers — the prompt context decides those.
+_NON_BRAND_ENTITIES = {
+    "google play",
+    "google play store",
+    "play store",
+    "app store",
+    "apple app store",
+    "android",
+    "ios",
+    "ipados",
+    "windows",
+    "macos",
+    "linux",
+    "chrome os",
+    "the internet",
+    "online",
+    "web",
+}
 
 
 def select_snapshot_prompts(prompts: list[dict], limit: int = _SNAPSHOT_LIMIT) -> list[dict]:
@@ -72,21 +101,25 @@ def _extract_brands(
     data = ask_claude_json(prompt, model="haiku", max_tokens=800)
     raw = data.get("brands", []) if isinstance(data, dict) else []
 
+    # Filter non-brand entities BEFORE taking the top 3 (so a slipped-through
+    # "Google Play" doesn't consume a slot), then assign contiguous ranks.
     top_3: list[dict] = []
-    for i, entry in enumerate(raw[:3], start=1):
+    for entry in raw:
         if not isinstance(entry, dict):
             continue
         name = (entry.get("brand") or "").strip()
-        if not name:
+        if not name or name.lower() in _NON_BRAND_ENTITIES:
             continue
         top_3.append(
             {
-                "rank": i,
+                "rank": len(top_3) + 1,
                 "brand": name,
                 "reason": (entry.get("reason") or "").strip(),
                 "matched_brand": match_brand(name, known),
             }
         )
+        if len(top_3) == 3:
+            break
 
     brand_present = any(t["matched_brand"] == brand_name for t in top_3)
     return top_3, brand_present

@@ -46,17 +46,22 @@ _GRADES = [
 # or a JS-challenge interstitial) and refuse to produce a report.
 _MIN_HOMEPAGE_CHARS = 200
 
-# Plain-language (Chinese) message shown to merchants when the site can't be read.
+# Plain-language message shown to merchants when the site can't be read.
 _UNREACHABLE_MESSAGE = (
-    "我们暂时无法访问这个网站,可能它开启了反爬虫保护,或者网址当前打不开。"
-    "请确认网址填写正确、网站能在浏览器里正常打开,然后再试一次。"
+    "We couldn't reach this site right now. It may be blocking automated "
+    "visitors, or the URL may be temporarily unavailable. Please check that the "
+    "URL is correct and that the store opens normally in a browser, then run the "
+    "scan again."
 )
 
 # Message for a password-protected / "Opening soon" Shopify storefront — the page
 # loads fine (so the length check passes) but contains no real, public content.
 _PASSWORD_MESSAGE = (
-    "这个店面开启了密码保护(或处于「即将开业」状态),AI 助手和我们都无法访问它的公开页面,"
-    "所以无法给出真实的 GEO 评分。请在 Shopify 后台 Online Store → Preferences 关闭密码保护后再扫描。"
+    "This storefront is password-protected (or set to 'Opening soon'), so "
+    "neither AI assistants nor we can reach its public pages — which means we "
+    "can't produce a real GEO score. In your Shopify admin, go to "
+    "Online Store → Preferences and turn off Password protection, then run the "
+    "scan again."
 )
 
 # Markers that identify a Shopify password / "Opening soon" page. These are
